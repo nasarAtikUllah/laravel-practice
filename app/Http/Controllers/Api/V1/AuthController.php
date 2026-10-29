@@ -16,7 +16,7 @@ class AuthController extends Controller
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => Hash::make($request->password)
+            'password' => Hash::make($request->password),
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -24,7 +24,7 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'User created successfully',
             'token' => $token,
-            'user' => $user
+            'user' => $user,
         ], 201);
     }
 
@@ -32,10 +32,10 @@ class AuthController extends Controller
     {
         $user = User::where('email', $request->email)->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (! $user || ! Hash::check($request->password, $user->password)) {
 
             return response()->json([
-                'message' => 'Invalid credentials'
+                'message' => 'Invalid credentials',
             ], 401);
         }
 
@@ -44,10 +44,10 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Login successful',
             'token' => $token,
-            'user' => $user
+            'user' => $user,
         ]);
     }
-    
+
     public function profile(Request $request)
     {
         return response()->json($request->user());
@@ -58,7 +58,7 @@ class AuthController extends Controller
         $request->user()->tokens()->delete();
 
         return response()->json([
-            'message' => 'Logged Out'
+            'message' => 'Logged Out',
         ]);
     }
 }
