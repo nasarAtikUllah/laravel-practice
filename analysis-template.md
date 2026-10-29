@@ -1,6 +1,6 @@
 Date: 29-10-2026
 -------------------
-Feature name:
+Feature name: 
 Business goal:
 User flow (step by step):
 Database impact (tables, columns, indexes):
@@ -13,8 +13,8 @@ Open questions for my lead:
 
 Report
 -----------
-Done today:
-Blocked on:
+Done today: day1, day2, day3
+Blocked on: --
 QA issues found:
-Tests added:
-Plan for tomorrow: Day 2 - Form Requests + registration + 10 Pest tests
+Tests added: 28
+Plan for tomorrow: Day 4 - Feature crud
