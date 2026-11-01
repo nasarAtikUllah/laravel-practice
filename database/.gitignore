@@ -1,1 +1,10 @@
 *.sqlite*
+.env
+vendor/
+node_modules/
+storage/*.key
+*.log
+.DS_Store
+.env
+.env.backup 
+.phpactor.json
