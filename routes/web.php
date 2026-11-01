@@ -7,7 +7,7 @@ Route::get('/', function () {
 });
 
 Route::get('/login', function () {
-    return 'Frontend login url';
+    return 'redirect to frontendlogin page';
 })->name('login');
 
 Route::get('/password-reset', function () {
