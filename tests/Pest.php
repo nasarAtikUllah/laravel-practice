@@ -1,7 +1,51 @@
 <?php
 
+use App\Models\Collection;
+use App\Models\Product;
+use App\Models\ProductVariant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
+
+function makeProduct(array $attributes = [], int $variants = 1): Product
+{
+    if (isset($attributes['collection_id']) && ! isset($attributes['brand_id'])) {
+        $attributes['brand_id'] = Collection::find($attributes['collection_id'])->brand_id;
+    }
+
+    $product = Product::factory()->create($attributes);
+
+    if ($variants > 0) {
+        ProductVariant::factory()->count($variants)->create(['product_id' => $product->id]);
+    }
+
+    return $product;
+}
+
+function productPayload(Collection $collection, array $overrides = []): array
+{
+    return array_merge([
+        'brand_id' => $collection->brand_id,
+        'collection_id' => $collection->id,
+        'name' => 'RFL Non-Stick Pan',
+    ], $overrides);
+}
+
+function variantPayload(array $overrides = []): array
+{
+    return array_merge([
+        'title' => '24 cm',
+        'sku' => 'PAN-24',
+        'price' => 1200,
+        'compare_price' => 1500,
+        'stock' => 10,
+    ], $overrides);
+}
+
+function fakePhoto(string $name = 'photo.jpg'): UploadedFile
+{
+    return UploadedFile::fake()->image($name, 100, 100);
+}
 
 /*
 |--------------------------------------------------------------------------

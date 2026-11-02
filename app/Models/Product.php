@@ -9,10 +9,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 use Spatie\Image\Enums\Fit;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
+
+/**
+ * @property ProductStatus $status
+ */
 class Product extends Model implements HasMedia
 {
     use HasFactory, InteractsWithMedia, SoftDeletes;
@@ -33,6 +38,25 @@ class Product extends Model implements HasMedia
         return ['status' => ProductStatus::class];
     }
 
+    protected static function booted(): void
+    {
+        static::deleting(function (Product $product) {
+            if ($product->isForceDeleting()) {
+                return;
+            }
+
+            // Free the slug so the same product can be created again.
+            $product->forceFill([
+                'slug' => Str::limit($product->slug, 200, '').'-deleted-'.$product->id,
+            ])->saveQuietly();
+
+            // One by one, so each variant's own deleting event frees its SKU.
+            $product->variants()->get()->each->delete();
+        });
+    }
+
+    // ---------- Relations ----------
+
     public function brand(): BelongsTo
     {
         return $this->belongsTo(Brand::class);
@@ -48,31 +72,35 @@ class Product extends Model implements HasMedia
         return $this->hasMany(ProductVariant::class);
     }
 
+    // ---------- Scopes ----------
+
     public function scopePublished(Builder $query): Builder
     {
-        return $query->where('status', ProductStatus::Published);
+        return $query->where('status', ProductStatus::Published->value);
     }
 
-
-    public function registerMediaCollections(): void
-    {
-        $this->addMediaCollection('featured_image')
-            ->singleFile()
-            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
-    }
-
-    public function registerMediaConversions(?Media $media = null): void
-    {
-        $this->addMediaConversion('thumb')
-            ->fit(Fit::Crop, 300, 300)
-            ->nonQueued();
-    }
-
+    /** What the public website may show. */
     public function scopeVisible(Builder $query): Builder
     {
         return $query
             ->whereIn('status', [ProductStatus::Published->value, ProductStatus::Upcoming->value])
             ->whereHas('brand', fn ($q) => $q->where('is_active', true))
             ->whereHas('collection', fn ($q) => $q->where('is_active', true));
+    }
+
+    // ---------- Media ----------
+
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('featured_image')
+            ->singleFile()
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp']);
+    }
+
+    public function registerMediaConversions(?Media $media = null): void
+    {
+        $this->addMediaConversion('thumb')
+            ->nonQueued()
+            ->fit(Fit::Crop, 300, 300);
     }
 }

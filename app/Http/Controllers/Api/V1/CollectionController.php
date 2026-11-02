@@ -26,7 +26,7 @@ class CollectionController extends Controller
 
     public function store(StoreCollectionRequest $request, Brand $brand): JsonResponse
     {
-        $collection = $brand->collections()->create($request->validated());
+        $collection = $brand->collections()->create($request->validated())->refresh();
 
         return $this->success(CollectionResource::make($collection), 'Collection created successfully.', 201);
     }
