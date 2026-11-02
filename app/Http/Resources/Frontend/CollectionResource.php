@@ -2,9 +2,11 @@
 
 namespace App\Http\Resources\Frontend;
 
+use App\Models\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
+/** @mixin Collection */
 class CollectionResource extends JsonResource
 {
     /**

@@ -13,14 +13,19 @@ return new class extends Migration
     {
         Schema::create('products', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('brand_id')->constrained()->restrictOnDelete();
+            $table->foreignId('collection_id')->constrained()->restrictOnDelete();
             $table->string('name');
             $table->string('slug')->unique();
-            $table->string('sku')->unique();
-            $table->decimal('price', 10, 2);
-            $table->integer('stock')->default(0);
-            $table->boolean('status')->default(true);
             $table->text('description')->nullable();
+            $table->string('status', 20)->default('draft')->index();
+            $table->string('seo_title')->nullable();
+            $table->string('seo_description', 500)->nullable();
             $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['brand_id', 'status']);
+            $table->index(['collection_id', 'status']);
         });
     }
 
