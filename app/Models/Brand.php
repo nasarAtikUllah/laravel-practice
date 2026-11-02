@@ -21,4 +21,11 @@ class Brand extends Model
     {
         return $this->hasMany(Collection::class);
     }
+
+    public function products()
+    {
+        return $this->hasMany(
+            Product::class
+        );
+    }
 }

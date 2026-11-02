@@ -5,7 +5,6 @@ use App\Http\Controllers\Api\V1\BrandController;
 use App\Http\Controllers\Api\V1\CollectionController;
 use App\Http\Controllers\Api\V1\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Frontend\BrandController as FrontendBrandController;
-use App\Http\Controllers\Api\V1\ProductController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('frontend')->middleware('throttle:60,1')->group(function () {
@@ -26,5 +25,4 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('brands', BrandController::class);
     Route::apiResource('brands.collections', CollectionController::class)->shallow();
 
-    Route::apiResource('products', ProductController::class);
 });

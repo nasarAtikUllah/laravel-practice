@@ -51,6 +51,10 @@ class CollectionController extends Controller
 
     public function destroy(Collection $collection): JsonResponse
     {
+        if ($collection->products()->withTrashed()->exists()) {
+            return $this->error('This collection has products. Move or delete them first.', 409);
+        }
+
         $collection->delete();
 
         return $this->success(null, 'Collection deleted successfully.');
