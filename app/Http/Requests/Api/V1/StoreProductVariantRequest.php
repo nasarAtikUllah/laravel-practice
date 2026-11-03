@@ -35,6 +35,7 @@ class StoreProductVariantRequest extends FormRequest
             'price' => ['required', 'numeric', 'decimal:0,2', 'gt:0', 'max:9999999999'],
             'compare_price' => ['nullable', 'numeric', 'decimal:0,2', 'gt:price', 'max:9999999999'],
             'stock' => ['sometimes', 'integer', 'min:1', 'max:1000000'],
+            'low_stock_threshold' => ['sometimes', 'integer', 'min:1', 'max:1000000'],
         ];
     }
 

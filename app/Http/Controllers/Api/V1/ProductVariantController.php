@@ -9,7 +9,9 @@ use App\Http\Requests\Api\V1\UpdateProductVariantRequest;
 use App\Http\Resources\ProductVariantResource;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Services\InventoryService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class ProductVariantController extends Controller
 {
@@ -23,10 +25,20 @@ class ProductVariantController extends Controller
         return $this->paginated($variants, ProductVariantResource::class, 'Variants retrieved successfully.');
     }
 
-    public function store(StoreProductVariantRequest $request, Product $product): JsonResponse
+    public function store(StoreProductVariantRequest $request, Product $product, InventoryService $inventory): JsonResponse
     {
-        // stock falls back to 0, so the response never shows null
-        $variant = $product->variants()->create($request->validated() + ['stock' => 0]);
+        $data = $request->validated();
+        $initialStock = (int) ($data['stock'] ?? 0);
+        unset($data['stock']);
+
+        $variant = DB::transaction(function () use ($product, $data, $initialStock, $inventory, $request) {
+            $variant = $product->variants()->create($data);
+
+            // Stock never goes straight into the column. It goes through the ledger.
+            $inventory->initial($variant, $initialStock, $request->user());
+
+            return $variant->refresh();
+        });
 
         return $this->success(
             ProductVariantResource::make($variant->load('media')),

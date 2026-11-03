@@ -29,7 +29,7 @@ class ProductVariantResource extends JsonResource
             'discount_percent' => ($compare !== null && $compare > $price)
                 ? (int) round(($compare - $price) / $compare * 100)
                 : null,
-            'in_stock' => $this->stock > 0,
+            'in_stock' => $this->available > 0,
             'images' => MediaResource::collection($this->getMedia('images')),
         ];
     }

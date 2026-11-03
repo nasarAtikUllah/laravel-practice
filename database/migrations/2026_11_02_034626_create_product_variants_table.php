@@ -19,6 +19,8 @@ return new class extends Migration
             $table->decimal('price', 12, 2);
             $table->decimal('compare_price', 12, 2)->nullable();
             $table->unsignedInteger('stock')->default(0);
+            $table->unsignedInteger('reserved')->default(0);
+            $table->unsignedInteger('low_stock_threshold')->default(5);
             $table->timestamps();
             $table->softDeletes();
 
