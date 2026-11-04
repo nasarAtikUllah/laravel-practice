@@ -56,3 +56,8 @@ it('does not make staff an admin', function () {
     expect($staff->isAdmin())->toBeFalse();
     expect($staff->canManageInventory())->toBeTrue();
 });
+it('knows who is an admin', function () {
+    expect(User::factory()->admin()->create()->isAdmin())->toBeTrue();
+    expect(User::factory()->staff()->create()->isAdmin())->toBeFalse();
+    expect(User::factory()->create()->isAdmin())->toBeFalse();
+});
