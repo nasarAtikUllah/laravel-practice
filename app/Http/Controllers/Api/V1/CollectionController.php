@@ -26,7 +26,7 @@ class CollectionController extends Controller
 
     public function store(StoreCollectionRequest $request, Brand $brand): JsonResponse
     {
-        $collection = $brand->collections()->create($request->validated());
+        $collection = $brand->collections()->create($request->validated())->refresh();
 
         return $this->success(CollectionResource::make($collection), 'Collection created successfully.', 201);
     }
@@ -51,6 +51,10 @@ class CollectionController extends Controller
 
     public function destroy(Collection $collection): JsonResponse
     {
+        if ($collection->products()->withTrashed()->exists()) {
+            return $this->error('This collection has products. Move or delete them first.', 409);
+        }
+
         $collection->delete();
 
         return $this->success(null, 'Collection deleted successfully.');

@@ -25,7 +25,7 @@ class BrandController extends Controller
 
     public function store(StoreBrandRequest $request): JsonResponse
     {
-        $brand = Brand::create($request->validated());
+        $brand = Brand::create($request->validated())->refresh();
 
         return $this->success(BrandResource::make($brand), 'Brand created successfully.', 201);
     }

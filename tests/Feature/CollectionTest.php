@@ -2,6 +2,7 @@
 
 use App\Models\Brand;
 use App\Models\Collection;
+use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -169,6 +170,23 @@ describe('when logged in', function () {
     });
 
     // ---------- DELETE ----------
+    it('blocks deleting a collection that has products', function () {
+        $collection = Collection::factory()->create(['brand_id' => $this->brand->id]);
+        Product::factory()->for($collection)->create();
+
+        $this->deleteJson("/api/collections/{$collection->id}")
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'This collection has products. Move or delete them first.');
+
+        $this->assertDatabaseHas('collections', ['id' => $collection->id]);
+    });
+
+    it('blocks deleting a collection whose products are soft-deleted', function () {
+        $collection = Collection::factory()->create(['brand_id' => $this->brand->id]);
+        Product::factory()->for($collection)->create()->delete();
+
+        $this->deleteJson("/api/collections/{$collection->id}")->assertStatus(409);
+    });
 
     it('deletes a collection', function () {
         $collection = Collection::factory()->create(['brand_id' => $this->brand->id]);
