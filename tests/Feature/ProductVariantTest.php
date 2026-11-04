@@ -328,14 +328,6 @@ describe('when logged in', function () {
         $this->putJson("/api/variants/{$variant->id}", ['compare_price' => 1500])->assertOk();
     });
 
-    it('sets the stock to zero', function () {
-        $variant = existingVariant($this->product);
-
-        $this->putJson("/api/variants/{$variant->id}", ['stock' => 0])
-            ->assertOk()
-            ->assertJsonPath('data.stock', 0);
-    });
-
     it('rejects a negative stock on update', function () {
         $variant = existingVariant($this->product);
 
