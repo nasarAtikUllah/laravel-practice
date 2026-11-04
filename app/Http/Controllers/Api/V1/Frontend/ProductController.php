@@ -17,7 +17,8 @@ class ProductController extends Controller
             ->visible()
             ->with(['brand:id,name,slug', 'collection:id,name,slug', 'media'])
             ->withMin('variants as price_from', 'price')
-            ->withSum('variants as total_stock', 'stock')
+            // ->withSum('variants as total_stock', 'stock')
+            ->withExists(['variants as in_stock' => fn ($q) => $q->whereColumn('stock', '>', 'reserved')])
             ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%'.$request->input('search').'%'))
             ->when($request->filled('brand'), fn ($q) => $q->whereHas('brand', fn ($b) => $b->where('slug', $request->input('brand'))))
             ->when($request->filled('collection'), fn ($q) => $q->whereHas('collection', fn ($c) => $c->where('slug', $request->input('collection'))));

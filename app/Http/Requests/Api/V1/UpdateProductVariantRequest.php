@@ -59,7 +59,8 @@ class UpdateProductVariantRequest extends FormRequest
                     }
                 },
             ],
-            'stock' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
+            'stock' => ['prohibited'],
+            'low_stock_threshold' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
         ];
     }
 
@@ -69,6 +70,7 @@ class UpdateProductVariantRequest extends FormRequest
             'sku.unique' => 'This SKU is already used by another variant.',
             'sku.regex' => 'The SKU can only contain letters, numbers, dots, dashes and underscores.',
             'price.gt' => 'The price must be greater than 0.',
+            'stock.prohibited' => 'Stock cannot be changed here. Use the stock adjust or stock count endpoints.',
         ];
     }
 }

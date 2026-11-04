@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 use Spatie\Image\Enums\Fit;
@@ -12,6 +14,9 @@ use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
+/**
+ * @property-read int $available
+ */
 class ProductVariant extends Model implements HasMedia
 {
     use HasFactory, InteractsWithMedia, SoftDeletes;
@@ -23,6 +28,7 @@ class ProductVariant extends Model implements HasMedia
         'price',
         'compare_price',
         'stock',
+        'low_stock_threshold',
     ];
 
     protected function casts(): array
@@ -31,6 +37,8 @@ class ProductVariant extends Model implements HasMedia
             'price' => 'decimal:2',
             'compare_price' => 'decimal:2',
             'stock' => 'integer',
+            'reserved' => 'integer',
+            'low_stock_threshold' => 'integer',
         ];
     }
 
@@ -68,5 +76,21 @@ class ProductVariant extends Model implements HasMedia
         $this->addMediaConversion('thumb')
             ->nonQueued()
             ->fit(Fit::Crop, 300, 300);
+    }
+
+    /** What can still be sold: on hand minus held by pending orders. */
+    protected function available(): Attribute
+    {
+        return Attribute::get(fn () => max(0, $this->stock - $this->reserved));
+    }
+
+    public function movements(): HasMany
+    {
+        return $this->hasMany(InventoryMovement::class);
+    }
+
+    public function reservations(): HasMany
+    {
+        return $this->hasMany(InventoryReservation::class);
     }
 }

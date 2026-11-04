@@ -11,7 +11,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * @mixin Product
  *
  * @property string|float|null $price_from
- * @property int|string|null $total_stock
+ * @property bool|int|null $in_stock
  */
 class ProductResource extends JsonResource
 {
@@ -33,7 +33,8 @@ class ProductResource extends JsonResource
             'brand' => $this->whenLoaded('brand', fn () => $this->brand->only(['name', 'slug'])),
             'collection' => $this->whenLoaded('collection', fn () => $this->collection->only(['name', 'slug'])),
             'price_from' => $this->price_from !== null ? number_format((float) $this->price_from, 2, '.', '') : null,
-            'in_stock' => (int) $this->total_stock > 0,
+            // 'in_stock' => (int) $this->total_stock > 0,
+            'in_stock' => (bool) $this->in_stock,
         ];
     }
 }

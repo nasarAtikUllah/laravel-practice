@@ -5,6 +5,7 @@ namespace App\Http\Resources\Frontend;
 use App\Enums\ProductStatus;
 use App\Http\Resources\MediaResource;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -39,7 +40,8 @@ class ProductDetailResource extends JsonResource
             ],
             'brand' => $this->whenLoaded('brand', fn () => $this->brand->only(['name', 'slug'])),
             'collection' => $this->whenLoaded('collection', fn () => $this->collection->only(['name', 'slug'])),
-            'in_stock' => $this->variants->contains('stock', '>', 0),
+            // 'in_stock' => $this->variants->contains('stock', '>', 0),
+            'in_stock' => $this->variants->contains(fn (ProductVariant $variant) => $variant->available > 0),
             'variants' => ProductVariantResource::collection($this->whenLoaded('variants')),
         ];
     }

@@ -361,3 +361,23 @@ it('returns 404 for an unknown slug', function () {
         ->assertNotFound()
         ->assertJsonPath('message', 'Resource not found.');
 });
+
+it('shows a product as out of stock when all its stock is reserved', function () {
+    $product = makeProduct(['slug' => 'pan'], 0);
+    ProductVariant::factory()->create(['product_id' => $product->id, 'stock' => 5, 'reserved' => 5]);
+
+    $this->getJson('/api/frontend/products')->assertJsonPath('data.0.in_stock', false);
+    $this->getJson('/api/frontend/products/pan')
+        ->assertJsonPath('data.in_stock', false)
+        ->assertJsonPath('data.variants.0.in_stock', false);
+});
+
+it('keeps a product in stock when only part of its stock is reserved', function () {
+    $product = makeProduct(['slug' => 'pan'], 0);
+    ProductVariant::factory()->create(['product_id' => $product->id, 'stock' => 5, 'reserved' => 4]);
+
+    $this->getJson('/api/frontend/products')->assertJsonPath('data.0.in_stock', true);
+    $this->getJson('/api/frontend/products/pan')
+        ->assertJsonPath('data.in_stock', true)
+        ->assertJsonPath('data.variants.0.in_stock', true);
+});

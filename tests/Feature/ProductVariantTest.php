@@ -1,6 +1,9 @@
 <?php
 
+// productvarient test
 use App\Enums\ProductStatus;
+use App\Enums\StockMovementType;
+use App\Models\InventoryMovement;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
@@ -325,14 +328,6 @@ describe('when logged in', function () {
         $this->putJson("/api/variants/{$variant->id}", ['compare_price' => 1500])->assertOk();
     });
 
-    it('sets the stock to zero', function () {
-        $variant = existingVariant($this->product);
-
-        $this->putJson("/api/variants/{$variant->id}", ['stock' => 0])
-            ->assertOk()
-            ->assertJsonPath('data.stock', 0);
-    });
-
     it('rejects a negative stock on update', function () {
         $variant = existingVariant($this->product);
 
@@ -420,5 +415,79 @@ describe('when logged in', function () {
 
     it('returns 404 when deleting a missing variant', function () {
         $this->deleteJson('/api/variants/999')->assertNotFound();
+    });
+
+    it('writes an initial stock movement when a variant is created with stock', function () {
+        $this->postJson($this->url, variantPayload(['stock' => 10]))->assertCreated();
+
+        $movement = InventoryMovement::firstOrFail();
+
+        expect($movement->type)->toBe(StockMovementType::Initial);
+        expect($movement->quantity)->toBe(10);
+        expect($movement->stock_before)->toBe(0);
+        expect($movement->stock_after)->toBe(10);
+        expect($movement->created_by)->not->toBeNull();
+    });
+
+    it('writes no movement when a variant is created without stock', function () {
+        $payload = variantPayload();
+        unset($payload['stock']);
+
+        $this->postJson($this->url, $payload)->assertCreated();
+        $this->postJson($this->url, variantPayload(['sku' => 'PAN-25', 'stock' => 0]))->assertCreated();
+
+        expect(InventoryMovement::count())->toBe(0);
+    });
+
+    it('does not change the stock through the update endpoint', function () {
+        $variant = existingVariant($this->product);
+
+        $this->putJson("/api/variants/{$variant->id}", ['stock' => 99])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('stock')
+            ->assertJsonPath('errors.stock.0', 'Stock cannot be changed here. Use the stock adjust or stock count endpoints.');
+
+        expect($variant->fresh()->stock)->toBe(10);
+        expect(InventoryMovement::count())->toBe(0);
+    });
+
+    it('refuses a stock of zero on update as well', function () {
+        $variant = existingVariant($this->product);
+
+        $this->putJson("/api/variants/{$variant->id}", ['stock' => 0])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('stock');
+    });
+
+    it('sets a low stock level of 5 when none is sent', function () {
+        $this->postJson($this->url, variantPayload())
+            ->assertCreated()
+            ->assertJsonPath('data.low_stock_threshold', 5);
+    });
+
+    it('saves the low stock level on create and update', function () {
+        $response = $this->postJson($this->url, variantPayload(['low_stock_threshold' => 12]))
+            ->assertCreated()
+            ->assertJsonPath('data.low_stock_threshold', 12);
+
+        $this->putJson('/api/variants/'.$response->json('data.id'), ['low_stock_threshold' => 3])
+            ->assertOk()
+            ->assertJsonPath('data.low_stock_threshold', 3);
+    });
+
+    it('rejects an invalid low stock level', function (mixed $level) {
+        $this->postJson($this->url, variantPayload(['low_stock_threshold' => $level]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('low_stock_threshold');
+    })->with([-1, 1.5, 'abc', 1000001]);
+
+    it('shows reserved and available stock in the variant response', function () {
+        $variant = existingVariant($this->product, ['stock' => 10, 'reserved' => 4]);
+
+        $this->getJson("/api/variants/{$variant->id}")
+            ->assertOk()
+            ->assertJsonPath('data.stock', 10)
+            ->assertJsonPath('data.reserved', 4)
+            ->assertJsonPath('data.available', 6);
     });
 });

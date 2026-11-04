@@ -67,6 +67,9 @@ class Product extends Model implements HasMedia
         return $this->belongsTo(Collection::class);
     }
 
+    /**
+     * @return HasMany<ProductVariant, $this>
+     */
     public function variants(): HasMany
     {
         return $this->hasMany(ProductVariant::class);

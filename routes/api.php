@@ -6,9 +6,12 @@ use App\Http\Controllers\Api\V1\CollectionController;
 use App\Http\Controllers\Api\V1\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Frontend\BrandController as FrontendBrandController;
 use App\Http\Controllers\Api\V1\Frontend\ProductController as FrontendProductController;
+use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\ProductImageController;
 use App\Http\Controllers\Api\V1\ProductVariantController;
+use App\Http\Controllers\Api\V1\StockController;
+use App\Http\Controllers\Api\V1\StockMovementController;
 use App\Http\Controllers\Api\V1\VariantImageController;
 use Illuminate\Support\Facades\Route;
 
@@ -40,4 +43,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/products/{product}/featured-image', [ProductImageController::class, 'destroy']);
     Route::post('/variants/{variant}/images', [VariantImageController::class, 'store']);
     Route::delete('/variants/{variant}/images/{mediaId}', [VariantImageController::class, 'destroy'])->whereNumber('mediaId');
+
+    Route::middleware(['can:manage-inventory', 'throttle:inventory'])->group(function () {
+        Route::get('/inventory', [InventoryController::class, 'index']);
+
+        // withTrashed: the history of a deleted variant must stay readable
+        Route::get('/variants/{variant}/stock-movements', [StockMovementController::class, 'index'])->withTrashed();
+
+        Route::post('/variants/{variant}/stock/adjust', [StockController::class, 'adjust']);
+        Route::post('/variants/{variant}/stock/count', [StockController::class, 'count']);
+    });
 });

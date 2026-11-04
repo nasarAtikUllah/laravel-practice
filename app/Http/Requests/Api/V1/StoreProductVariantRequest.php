@@ -34,7 +34,8 @@ class StoreProductVariantRequest extends FormRequest
             'sku' => ['required', 'string', 'max:100', 'regex:/^[A-Z0-9][A-Z0-9._-]*$/', 'unique:product_variants,sku'],
             'price' => ['required', 'numeric', 'decimal:0,2', 'gt:0', 'max:9999999999'],
             'compare_price' => ['nullable', 'numeric', 'decimal:0,2', 'gt:price', 'max:9999999999'],
-            'stock' => ['sometimes', 'integer', 'min:1', 'max:1000000'],
+            'stock' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
+            'low_stock_threshold' => ['sometimes', 'integer', 'min:1', 'max:1000000'],
         ];
     }
 
