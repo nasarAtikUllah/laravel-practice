@@ -3,6 +3,9 @@
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BrandController;
 use App\Http\Controllers\Api\V1\CollectionController;
+use App\Http\Controllers\Api\V1\CouponController;
+use App\Http\Controllers\Api\V1\CouponQuoteController;
+use App\Http\Controllers\Api\V1\CouponRedemptionController;
 use App\Http\Controllers\Api\V1\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Frontend\BrandController as FrontendBrandController;
 use App\Http\Controllers\Api\V1\Frontend\ProductController as FrontendProductController;
@@ -52,5 +55,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::post('/variants/{variant}/stock/adjust', [StockController::class, 'adjust']);
         Route::post('/variants/{variant}/stock/count', [StockController::class, 'count']);
+    });
+
+    Route::post('/coupons/quote', CouponQuoteController::class)->middleware('throttle:coupon-quote');
+
+    Route::middleware(['can:manage-coupons', 'throttle:coupon-admin'])->group(function () {
+        Route::apiResource('coupons', CouponController::class);
+
+        // withTrashed: the history of a deleted coupon must stay readable
+        Route::get('/coupons/{coupon}/redemptions', [CouponRedemptionController::class, 'index'])->withTrashed();
     });
 });

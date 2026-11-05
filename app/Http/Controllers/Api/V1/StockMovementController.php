@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\StockMovementType;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\InventoryVariantResource;
 use App\Http\Resources\StockMovementResource;
 use App\Models\ProductVariant;
 use Illuminate\Http\JsonResponse;
@@ -24,6 +25,10 @@ class StockMovementController extends Controller
             ->orderByDesc('id')
             ->paginate(20);
 
-        return $this->paginated($movements, StockMovementResource::class, 'Stock movements retrieved successfully.');
+        $variant->load('product:id,name,slug');
+
+        return $this->paginated($movements, StockMovementResource::class, 'Stock movements retrieved successfully.', [
+            'variant' => InventoryVariantResource::make($variant),
+        ]);
     }
 }

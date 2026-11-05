@@ -97,7 +97,7 @@ class Product extends Model implements HasMedia
     {
         $this->addMediaCollection('featured_image')
             ->singleFile()
-            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp']);
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
     }
 
     public function registerMediaConversions(?Media $media = null): void

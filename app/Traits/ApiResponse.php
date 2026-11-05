@@ -24,17 +24,20 @@ trait ApiResponse
         ], $status);
     }
 
-    protected function paginated(LengthAwarePaginator $paginator, string $resource, string $message = 'Success'): JsonResponse
+    protected function paginated(LengthAwarePaginator $paginator, string $resource, string $message = 'Success', array $extra = []): JsonResponse
     {
-        return response()->json([
-            'message' => $message,
-            'data' => $resource::collection($paginator->items()),
-            'meta' => [
-                'current_page' => $paginator->currentPage(),
-                'last_page' => $paginator->lastPage(),
-                'per_page' => $paginator->perPage(),
-                'total' => $paginator->total(),
-            ],
-        ]);
+        return response()->json(array_merge(
+            ['message' => $message],
+            $extra,
+            [
+                'data' => $resource::collection($paginator->items()),
+                'meta' => [
+                    'current_page' => $paginator->currentPage(),
+                    'last_page' => $paginator->lastPage(),
+                    'per_page' => $paginator->perPage(),
+                    'total' => $paginator->total(),
+                ],
+            ]
+        ));
     }
 }

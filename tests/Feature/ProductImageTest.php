@@ -85,8 +85,8 @@ describe('product featured image', function () {
             ->assertJsonValidationErrors('image');
     });
 
-    it('rejects an image larger than 2 MB', function () {
-        $this->postJson($this->url, ['image' => UploadedFile::fake()->image('big.jpg')->size(3000)])
+    it('rejects an image larger than 10 MB', function () {
+        $this->postJson($this->url, ['image' => UploadedFile::fake()->image('big.jpg')->size(12000)])
             ->assertStatus(422)
             ->assertJsonValidationErrors('image');
     });
