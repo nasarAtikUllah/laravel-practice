@@ -7,6 +7,7 @@ use App\Models\InventoryMovement;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
+use App\Services\InventoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 
@@ -137,7 +138,7 @@ describe('when logged in', function () {
     });
 
     it('lets the sku of a deleted variant be used again', function () {
-        $variant = existingVariant($this->product);
+        $variant = existingVariant($this->product, ['stock' => 0]);
 
         $this->deleteJson("/api/variants/{$variant->id}")->assertOk();
 
@@ -147,7 +148,7 @@ describe('when logged in', function () {
     });
 
     it('renames the sku of a deleted variant', function () {
-        $variant = existingVariant($this->product);
+        $variant = existingVariant($this->product, ['stock' => 0]);
 
         $this->deleteJson("/api/variants/{$variant->id}")->assertOk();
 
@@ -369,7 +370,7 @@ describe('when logged in', function () {
     // ---------- DELETE ----------
 
     it('deletes a variant', function () {
-        $variant = existingVariant($this->product);
+        $variant = existingVariant($this->product, ['stock' => 0]);
 
         $this->deleteJson("/api/variants/{$variant->id}")
             ->assertOk()
@@ -399,7 +400,7 @@ describe('when logged in', function () {
     });
 
     it('allows deleting one of two variants of a published product', function () {
-        $product = makeProduct(['status' => ProductStatus::Published], 2);
+        $product = makeProductWithoutStock(['status' => ProductStatus::Published], 2);
         $variant = $product->variants()->first();
 
         $this->deleteJson("/api/variants/{$variant->id}")->assertOk();
@@ -408,7 +409,7 @@ describe('when logged in', function () {
     });
 
     it('allows deleting the last variant of a draft product', function () {
-        $variant = existingVariant($this->product);
+        $variant = existingVariant($this->product, ['stock' => 0]);
 
         $this->deleteJson("/api/variants/{$variant->id}")->assertOk();
     });
@@ -434,7 +435,15 @@ describe('when logged in', function () {
         unset($payload['stock']);
 
         $this->postJson($this->url, $payload)->assertCreated();
-        $this->postJson($this->url, variantPayload(['sku' => 'PAN-25', 'stock' => 0]))->assertCreated();
+
+        $this->postJson(
+            $this->url,
+            variantPayload([
+                'title' => 'Large Size',
+                'sku' => 'PAN-25',
+                'stock' => 0,
+            ])
+        )->assertCreated();
 
         expect(InventoryMovement::count())->toBe(0);
     });
@@ -489,5 +498,34 @@ describe('when logged in', function () {
             ->assertJsonPath('data.stock', 10)
             ->assertJsonPath('data.reserved', 4)
             ->assertJsonPath('data.available', 6);
+    });
+
+    it('blocks deleting a variant that still has stock', function () {
+        $variant = existingVariant($this->product, ['stock' => 5]);
+
+        $this->deleteJson("/api/variants/{$variant->id}")
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'This variant still has 5 unit(s) in stock. Set its stock to 0 with a stock count first, so the change is recorded.');
+
+        $this->assertNotSoftDeleted('product_variants', ['id' => $variant->id]);
+    });
+
+    it('blocks deleting a variant that has stock held for pending orders', function () {
+        $variant = existingVariant($this->product, ['stock' => 5, 'reserved' => 3]);
+
+        $this->deleteJson("/api/variants/{$variant->id}")
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'This variant has 3 unit(s) held for pending orders. Wait until those orders end before deleting it.');
+
+        $this->assertNotSoftDeleted('product_variants', ['id' => $variant->id]);
+    });
+
+    it('deletes a variant after its stock was counted down to zero', function () {
+        $variant = existingVariant($this->product, ['stock' => 5]);
+        app(InventoryService::class)->countTo($variant, 0);
+
+        $this->deleteJson("/api/variants/{$variant->id}")->assertOk();
+
+        $this->assertSoftDeleted('product_variants', ['id' => $variant->id]);
     });
 });

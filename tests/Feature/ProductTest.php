@@ -266,7 +266,7 @@ describe('when logged in', function () {
 
     it('lets the variant skus of a deleted product be used again', function () {
         $product = makeProduct(['collection_id' => $this->collection->id], 0);
-        ProductVariant::factory()->create(['product_id' => $product->id, 'sku' => 'PAN-24']);
+        ProductVariant::factory()->create(['product_id' => $product->id, 'sku' => 'PAN-24', 'stock' => 0]);
 
         $this->deleteJson("/api/products/{$product->id}")->assertOk();
 
@@ -479,7 +479,7 @@ describe('when logged in', function () {
     // ---------- DELETE ----------
 
     it('deletes a product and its variants', function () {
-        $product = makeProduct(['collection_id' => $this->collection->id], 2);
+        $product = makeProductWithoutStock(['collection_id' => $this->collection->id], 2);
         $variantIds = $product->variants()->pluck('id');
 
         $this->deleteJson("/api/products/{$product->id}")
@@ -495,8 +495,8 @@ describe('when logged in', function () {
     });
 
     it('does not delete the variants of other products', function () {
-        $product = makeProduct(['collection_id' => $this->collection->id], 1);
-        $other = makeProduct(['collection_id' => $this->collection->id], 1);
+        $product = makeProductWithoutStock(['collection_id' => $this->collection->id], 1);
+        $other = makeProductWithoutStock(['collection_id' => $this->collection->id], 1);
 
         $this->deleteJson("/api/products/{$product->id}")->assertOk();
 
@@ -513,5 +513,34 @@ describe('when logged in', function () {
         $this->deleteJson("/api/products/{$product->id}")->assertOk();
         $this->deleteJson("/api/products/{$product->id}")->assertNotFound();
         $this->getJson("/api/products/{$product->id}")->assertNotFound();
+    });
+
+    it('blocks deleting a product when a variant still has stock', function () {
+        $product = makeProduct(['collection_id' => $this->collection->id], 0);
+        ProductVariant::factory()->create(['product_id' => $product->id, 'stock' => 4, 'reserved' => 0]);
+
+        $this->deleteJson("/api/products/{$product->id}")
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'This product still has stock. Set the stock of its variants to 0 with a stock count first, so the change is recorded.');
+
+        $this->assertNotSoftDeleted('products', ['id' => $product->id]);
+    });
+
+    it('blocks deleting a product when stock is held for pending orders', function () {
+        $product = makeProduct(['collection_id' => $this->collection->id], 0);
+        ProductVariant::factory()->create(['product_id' => $product->id, 'stock' => 4, 'reserved' => 2]);
+
+        $this->deleteJson("/api/products/{$product->id}")
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'This product has stock held for pending orders. Wait until those orders end before deleting it.');
+
+        $this->assertNotSoftDeleted('products', ['id' => $product->id]);
+    });
+
+    it('ignores deleted variants when checking stock before deleting a product', function () {
+        $product = makeProduct(['collection_id' => $this->collection->id], 0);
+        ProductVariant::factory()->create(['product_id' => $product->id, 'stock' => 4])->delete();
+
+        $this->deleteJson("/api/products/{$product->id}")->assertOk();
     });
 });

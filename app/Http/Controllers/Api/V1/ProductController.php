@@ -72,10 +72,28 @@ class ProductController extends Controller
 
     public function destroy(Product $product): JsonResponse
     {
-        // The model frees the slug and deletes the variants one by one.
-        DB::transaction(fn () => $product->delete());
+        return DB::transaction(function () use ($product) {
+            $variants = $product->variants()->lockForUpdate()->get();
 
-        return $this->success(null, 'Product deleted successfully.');
+            if ($variants->sum('reserved') > 0) {
+                return $this->error(
+                    'This product has stock held for pending orders. Wait until those orders end before deleting it.',
+                    409
+                );
+            }
+
+            if ($variants->sum('stock') > 0) {
+                return $this->error(
+                    'This product still has stock. Set the stock of its variants to 0 with a stock count first, so the change is recorded.',
+                    409
+                );
+            }
+
+            // The model frees the slug and deletes the variants one by one.
+            $product->delete();
+
+            return $this->success(null, 'Product deleted successfully.');
+        });
     }
 
     private function withDetails(Product $product): Product

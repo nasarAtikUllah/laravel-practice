@@ -58,9 +58,10 @@ class ProductVariant extends Model implements HasMedia
 
     // ---------- Relations ----------
 
+    /** @return BelongsTo<Product, $this> */
     public function product(): BelongsTo
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(Product::class)->withTrashed();
     }
 
     // ---------- Media ----------
@@ -68,7 +69,7 @@ class ProductVariant extends Model implements HasMedia
     public function registerMediaCollections(): void
     {
         $this->addMediaCollection('images')
-            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp']);
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
     }
 
     public function registerMediaConversions(?Media $media = null): void

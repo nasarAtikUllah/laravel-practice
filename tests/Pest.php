@@ -130,3 +130,12 @@ function something()
 {
     // ..
 }
+
+function makeProductWithoutStock(array $attributes = [], int $variants = 1): Product
+{
+    $product = makeProduct($attributes, 0);
+
+    ProductVariant::factory()->count($variants)->create(['product_id' => $product->id, 'stock' => 0, 'reserved' => 0]);
+
+    return $product;
+}

@@ -67,23 +67,41 @@ class ProductVariantController extends Controller
 
     public function destroy(ProductVariant $variant): JsonResponse
     {
-        $productIsPublished = Product::query()
-            ->whereKey($variant->product_id)
-            ->where('status', ProductStatus::Published->value)
-            ->exists();
+        return DB::transaction(function () use ($variant) {
+            $locked = ProductVariant::lockForUpdate()->findOrFail($variant->id);
 
-        // count() skips soft-deleted variants on its own
-        $isLastVariant = ProductVariant::where('product_id', $variant->product_id)->count() === 1;
+            $productIsPublished = Product::query()
+                ->whereKey($locked->product_id)
+                ->where('status', ProductStatus::Published->value)
+                ->exists();
 
-        if ($productIsPublished && $isLastVariant) {
-            return $this->error(
-                'A published product needs at least one variant. Add another variant or change the product status first.',
-                409
-            );
-        }
+            // count() skips soft-deleted variants on its own
+            $isLastVariant = ProductVariant::where('product_id', $locked->product_id)->count() === 1;
 
-        $variant->delete();
+            if ($productIsPublished && $isLastVariant) {
+                return $this->error(
+                    'A published product needs at least one variant. Add another variant or change the product status first.',
+                    409
+                );
+            }
 
-        return $this->success(null, 'Variant deleted successfully.');
+            if ($locked->reserved > 0) {
+                return $this->error(
+                    "This variant has {$locked->reserved} unit(s) held for pending orders. Wait until those orders end before deleting it.",
+                    409
+                );
+            }
+
+            if ($locked->stock > 0) {
+                return $this->error(
+                    "This variant still has {$locked->stock} unit(s) in stock. Set its stock to 0 with a stock count first, so the change is recorded.",
+                    409
+                );
+            }
+
+            $locked->delete();
+
+            return $this->success(null, 'Variant deleted successfully.');
+        });
     }
 }
