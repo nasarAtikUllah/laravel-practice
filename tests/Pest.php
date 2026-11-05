@@ -1,8 +1,11 @@
 <?php
 
 use App\Models\Collection;
+use App\Models\Coupon;
+use App\Models\CouponRedemption;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
@@ -47,6 +50,41 @@ function fakePhoto(string $name = 'photo.jpg'): UploadedFile
     return UploadedFile::fake()->image($name, 100, 100);
 }
 
+function makeCoupon(array $attributes = []): Coupon
+{
+    return Coupon::factory()->create($attributes);
+}
+
+/** A variant that can be bought: its product is published and its brand and collection are active. */
+function buyable(float $price = 1000, array $attributes = []): ProductVariant
+{
+    $product = makeProduct([], 0);
+
+    return ProductVariant::factory()->create(array_merge([
+        'product_id' => $product->id,
+        'price' => $price,
+        'compare_price' => null,
+        'stock' => 10,
+    ], $attributes));
+}
+
+/** @param array<int, array{0: ProductVariant, 1: int}> $pairs */
+function cartOf(array $pairs): array
+{
+    return array_map(fn (array $pair) => ['variant_id' => $pair[0]->id, 'quantity' => $pair[1]], $pairs);
+}
+
+function makeRedemption(Coupon $coupon, ?User $user = null, array $attributes = []): CouponRedemption
+{
+    return CouponRedemption::create(array_merge([
+        'coupon_id' => $coupon->id,
+        'user_id' => ($user ?? User::factory()->create())->id,
+        'reference_type' => 'order',
+        'reference_id' => fake()->unique()->numberBetween(1, 1000000),
+        'discount_amount' => 100,
+        'status' => 'redeemed',
+    ], $attributes));
+}
 /*
 |--------------------------------------------------------------------------
 | Test Case
@@ -91,4 +129,13 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+function makeProductWithoutStock(array $attributes = [], int $variants = 1): Product
+{
+    $product = makeProduct($attributes, 0);
+
+    ProductVariant::factory()->count($variants)->create(['product_id' => $product->id, 'stock' => 0, 'reserved' => 0]);
+
+    return $product;
 }
