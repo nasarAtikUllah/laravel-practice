@@ -18,6 +18,7 @@ class CollectionController extends Controller
         $collections = $brand->collections()
             ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%'.$request->string('search').'%'))
             ->when($request->has('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')))
+            ->withCount('products')
             ->latest('id')
             ->paginate(15);
 
@@ -26,15 +27,16 @@ class CollectionController extends Controller
 
     public function store(StoreCollectionRequest $request, Brand $brand): JsonResponse
     {
-        $collection = $brand->collections()->create($request->validated())->refresh();
+        $collection = $brand->collections()->create($request->validated())->refresh()->loadCount('products');
 
         return $this->success(CollectionResource::make($collection), 'Collection created successfully.', 201);
     }
 
     public function show(Collection $collection): JsonResponse
     {
+        // show and update: load the count with the brand
         return $this->success(
-            CollectionResource::make($collection->load('brand')),
+            CollectionResource::make($collection->load('brand')->loadCount('products')),
             'Collection retrieved successfully.'
         );
     }
@@ -44,7 +46,7 @@ class CollectionController extends Controller
         $collection->update($request->validated());
 
         return $this->success(
-            CollectionResource::make($collection->load('brand')),
+            CollectionResource::make($collection->load('brand')->loadCount('products')),
             'Collection updated successfully.'
         );
     }

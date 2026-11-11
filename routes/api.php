@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\CouponQuoteController;
 use App\Http\Controllers\Api\V1\CouponRedemptionController;
 use App\Http\Controllers\Api\V1\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Frontend\BrandController as FrontendBrandController;
+use App\Http\Controllers\Api\V1\Frontend\CollectionController as FrontendCollectionController;
 use App\Http\Controllers\Api\V1\Frontend\ProductController as FrontendProductController;
 use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\ProductController;
@@ -21,6 +22,9 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('frontend')->middleware('throttle:60,1')->group(function () {
     Route::get('/brands', [FrontendBrandController::class, 'index']);
     Route::get('/brands/{slug}', [FrontendBrandController::class, 'show']);
+
+    Route::get('/brands/{brandId}/collections', [FrontendCollectionController::class, 'index'])->whereNumber('brandId');
+    Route::get('/collections/{collectionId}', [FrontendCollectionController::class, 'show'])->whereNumber('collectionId');
 
     Route::get('/products', [FrontendProductController::class, 'index']);
     Route::get('/products/{slug}', [FrontendProductController::class, 'show']);

@@ -86,7 +86,7 @@ class Product extends Model implements HasMedia
     public function scopeVisible(Builder $query): Builder
     {
         return $query
-            ->whereIn('status', [ProductStatus::Published->value, ProductStatus::Upcoming->value])
+            ->whereIn('status', ProductStatus::visibleValues())
             ->whereHas('brand', fn ($q) => $q->where('is_active', true))
             ->whereHas('collection', fn ($q) => $q->where('is_active', true));
     }

@@ -21,6 +21,8 @@ class CollectionResource extends JsonResource
             'name' => $this->name,
             'slug' => $this->slug,
             'description' => $this->description,
+            'products_count' => $this->whenCounted('products'),
+            'brand' => $this->whenLoaded('brand', fn () => $this->brand->only(['id', 'name', 'slug'])),
         ];
     }
 }

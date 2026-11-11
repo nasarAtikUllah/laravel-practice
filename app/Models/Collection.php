@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Collection extends Model
 {
@@ -28,10 +29,13 @@ class Collection extends Model
         return $this->belongsTo(Brand::class);
     }
 
-    public function products()
+    /**
+     * Get all products belonging to this collection.
+     *
+     * @return HasMany<Product, $this>
+     */
+    public function products(): HasMany
     {
-        return $this->hasMany(
-            Product::class
-        );
+        return $this->hasMany(Product::class, 'collection_id');
     }
 }
