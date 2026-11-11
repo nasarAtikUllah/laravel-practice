@@ -140,14 +140,14 @@ it('returns 404 for an inactive, missing or non-numeric brand', function () {
 it('uses the same number of queries however many collections a brand has', function () {
     $brand = Brand::factory()->create();
     Collection::factory()->count(2)->create(['brand_id' => $brand->id])
-        ->each(fn($c) => shopProduct($c, 'P ' . $c->id));
+        ->each(fn ($c) => shopProduct($c, 'P '.$c->id));
 
     DB::enableQueryLog();
     $this->getJson("/api/frontend/brands/{$brand->id}/collections")->assertOk();
     $small = count(DB::getQueryLog());
 
     Collection::factory()->count(8)->create(['brand_id' => $brand->id])
-        ->each(fn($c) => shopProduct($c, 'P ' . $c->id));
+        ->each(fn ($c) => shopProduct($c, 'P '.$c->id));
 
     DB::flushQueryLog();
     $this->getJson("/api/frontend/brands/{$brand->id}/collections")->assertOk();
