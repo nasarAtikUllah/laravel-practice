@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1\Frontend;
 
+use App\Enums\ProductStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Frontend\BrandDetailResource;
 use App\Http\Resources\Frontend\BrandResource;
@@ -29,7 +30,10 @@ class BrandController extends Controller
             ->where('slug', $slug)
             ->where('is_active', true)
             ->withCount(['collections' => fn ($q) => $q->where('is_active', true)])
-            ->with(['collections' => fn ($q) => $q->where('is_active', true)->orderBy('name')])
+            ->with(['collections' => fn ($q) => $q
+                ->where('is_active', true)
+                ->withCount(['products' => fn ($p) => $p->whereIn('status', ProductStatus::visibleValues())])
+                ->orderBy('name')])
             ->firstOrFail();
 
         return $this->success(BrandDetailResource::make($brand), 'Brand retrieved successfully.');
