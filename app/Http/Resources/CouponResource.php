@@ -15,6 +15,8 @@ use Illuminate\Support\Carbon;
  * @property CouponType $type
  * @property Carbon|null $starts_at
  * @property Carbon|null $expires_at
+ * @property int|string|null $brands_count
+ * @property int|string|null $products_count
  * @property int|null $usage_limit_total
  * @property int|null $usage_limit_per_user
  * @property bool $is_active
@@ -28,6 +30,11 @@ class CouponResource extends JsonResource
             'id' => $this->id,
             'code' => $this->code,
             'type' => $this->type->value,
+            'scope' => $this->scope->value,
+            'brands_count' => $this->whenCounted('brands'),
+            'products_count' => $this->whenCounted('products'),
+            'brands' => $this->whenLoaded('brands', fn () => $this->brands->map(fn ($brand) => $brand->only(['id', 'name', 'slug']))->all()),
+            'products' => $this->whenLoaded('products', fn () => $this->products->map(fn ($product) => $product->only(['id', 'name', 'slug']))->all()),
             'value' => $this->value,
             'max_discount' => $this->max_discount,
             'min_order_amount' => $this->min_order_amount,

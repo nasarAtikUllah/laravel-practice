@@ -19,9 +19,16 @@ class CouponException extends DomainException
         return new self('This coupon code is not valid.');
     }
 
-    public static function minimumNotMet(string $amount): self
+    public static function minimumNotMet(string $amount, bool $eligibleOnly = false): self
     {
-        return new self("The order total must be at least {$amount} to use this coupon.");
+        return new self($eligibleOnly
+            ? "The total of the items this coupon applies to must be at least {$amount} to use this coupon."
+            : "The order total must be at least {$amount} to use this coupon.");
+    }
+
+    public static function notApplicable(): self
+    {
+        return new self('This coupon does not apply to the items in your cart.');
     }
 
     public static function noDiscount(): self

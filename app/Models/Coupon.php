@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Enums\CouponScope;
 use App\Enums\CouponType;
 use App\Enums\RedemptionStatus;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
@@ -15,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property string $code
  * @property CouponType $type
+ * @property CouponScope $scope
  * @property string $value
  * @property string|null $max_discount
  * @property string|null $min_order_amount
@@ -31,6 +34,7 @@ class Coupon extends Model
     protected $fillable = [
         'code',
         'type',
+        'scope',
         'value',
         'max_discount',
         'min_order_amount',
@@ -45,6 +49,7 @@ class Coupon extends Model
     {
         return [
             'type' => CouponType::class,
+            'scope' => CouponScope::class,
             'value' => 'decimal:2',
             'max_discount' => 'decimal:2',
             'min_order_amount' => 'decimal:2',
@@ -98,5 +103,17 @@ class Coupon extends Model
         }
 
         return 'active';
+    }
+
+    /** @return BelongsToMany<Brand, $this> */
+    public function brands(): BelongsToMany
+    {
+        return $this->belongsToMany(Brand::class, 'coupon_brand');
+    }
+
+    /** @return BelongsToMany<Product, $this> */
+    public function products(): BelongsToMany
+    {
+        return $this->belongsToMany(Product::class, 'coupon_product');
     }
 }

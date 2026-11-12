@@ -2,8 +2,11 @@
 
 namespace Database\Factories;
 
+use App\Enums\CouponScope;
 use App\Enums\CouponType;
+use App\Models\Brand;
 use App\Models\Coupon;
+use App\Models\Product;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -55,5 +58,23 @@ class CouponFactory extends Factory
     public function scheduled(): static
     {
         return $this->state(['starts_at' => now()->addDay(), 'expires_at' => now()->addDays(10)]);
+    }
+
+    /** @param array<int, Brand|int> $brands */
+    public function forBrands(array $brands): static
+    {
+        return $this->state(['scope' => CouponScope::Brands])
+            ->afterCreating(fn (Coupon $coupon) => $coupon->brands()->sync(
+                array_map(fn ($brand) => is_object($brand) ? $brand->id : $brand, $brands)
+            ));
+    }
+
+    /** @param array<int, Product|int> $products */
+    public function forProducts(array $products): static
+    {
+        return $this->state(['scope' => CouponScope::Products])
+            ->afterCreating(fn (Coupon $coupon) => $coupon->products()->sync(
+                array_map(fn ($product) => is_object($product) ? $product->id : $product, $products)
+            ));
     }
 }

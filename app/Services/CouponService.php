@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\CouponScope;
 use App\Enums\CouponType;
 use App\Enums\ProductStatus;
 use App\Enums\RedemptionStatus;
@@ -10,6 +11,7 @@ use App\Models\Coupon;
 use App\Models\CouponRedemption;
 use App\Models\ProductVariant;
 use App\Models\User;
+use Closure;
 use Illuminate\Support\Facades\DB;
 
 class CouponService
@@ -36,10 +38,7 @@ class CouponService
 
         $this->assertUsable($coupon, $user);
 
-        $cart = $this->priceCart($items);
-        $discount = $this->discountFor($coupon, $cart['total']);
-
-        return $this->summary($coupon, $this->allocate($cart['lines'], $discount, $cart['total']), $cart['total'], $discount);
+        return $this->summary($coupon, $this->evaluate($coupon, $items));
     }
 
     // ---------- Order flow ----------
@@ -174,12 +173,11 @@ class CouponService
 
             $this->assertUsable($coupon, $user);
 
-            $cart = $this->priceCart($items);
-            $discount = $this->discountFor($coupon, $cart['total']);
+            $result = $this->evaluate($coupon, $items);
 
             $attributes = [
                 'user_id' => $user->id,
-                'discount_amount' => $this->fromCents($discount),
+                'discount_amount' => $this->fromCents($result['discount']),
                 'status' => $status,
                 'expires_at' => $status === RedemptionStatus::Reserved
                     ? now()->addMinutes($minutes ?? self::reservationMinutes())
@@ -223,19 +221,76 @@ class CouponService
         }
     }
 
-    private function discountFor(Coupon $coupon, int $totalCents): int
+    /**
+     * Prices the cart, finds the lines the coupon covers, and works out the discount on those lines only.
+     *
+     * @param  array<int, array{variant_id: int|string, quantity: int|string}>  $items
+     * @return array{lines: array<int, array<string, mixed>>, total: int, eligible_total: int, discount: int}
+     */
+    private function evaluate(Coupon $coupon, array $items): array
+    {
+        $cart = $this->priceCart($items);
+        $isEligible = $this->eligibility($coupon);
+
+        $lines = array_map(fn (array $line) => $line + ['eligible' => $isEligible($line)], $cart['lines']);
+
+        $eligibleTotal = 0;
+
+        foreach ($lines as $line) {
+            if ($line['eligible']) {
+                $eligibleTotal += $line['line_cents'];
+            }
+        }
+
+        if ($eligibleTotal < 1) {
+            throw CouponException::notApplicable();
+        }
+
+        $discount = $this->discountFor($coupon, $eligibleTotal);
+
+        return [
+            'lines' => $this->allocate($lines, $discount, $eligibleTotal),
+            'total' => $cart['total'],
+            'eligible_total' => $eligibleTotal,
+            'discount' => $discount,
+        ];
+    }
+
+    /** @return Closure(array<string, mixed>): bool */
+    private function eligibility(Coupon $coupon): Closure
+    {
+        return match ($coupon->scope) {
+            CouponScope::All => fn (array $line): bool => true,
+            CouponScope::Brands => $this->matching($coupon->brands()->pluck('brands.id')->all(), 'brand_id'),
+            CouponScope::Products => $this->matching($coupon->products()->pluck('products.id')->all(), 'product_id'),
+        };
+    }
+
+    /**
+     * @param  array<int, mixed>  $ids
+     * @return Closure(array<string, mixed>): bool
+     */
+    private function matching(array $ids, string $key): Closure
+    {
+        $ids = array_map('intval', $ids);
+
+        return fn (array $line): bool => in_array((int) $line[$key], $ids, true);
+    }
+
+    /** The minimum and the discount are worked out on the covered items only. */
+    private function discountFor(Coupon $coupon, int $eligibleTotal): int
     {
         $minimum = $coupon->min_order_amount !== null ? $this->toCents($coupon->min_order_amount) : 0;
 
-        if ($minimum > 0 && $totalCents < $minimum) {
-            throw CouponException::minimumNotMet($this->fromCents($minimum));
+        if ($minimum > 0 && $eligibleTotal < $minimum) {
+            throw CouponException::minimumNotMet($this->fromCents($minimum), $coupon->scope !== CouponScope::All);
         }
 
         $valueCents = $this->toCents($coupon->value);
 
         if ($coupon->type === CouponType::Percentage) {
             // The value in cents is the percentage in basis points (12.50% = 1250). Half rounds up.
-            $discount = intdiv($totalCents * $valueCents + 5000, 10000);
+            $discount = intdiv($eligibleTotal * $valueCents + 5000, 10000);
 
             if ($coupon->max_discount !== null) {
                 $discount = min($discount, $this->toCents($coupon->max_discount));
@@ -244,7 +299,7 @@ class CouponService
             $discount = $valueCents;
         }
 
-        $discount = min($discount, $totalCents);
+        $discount = min($discount, $eligibleTotal);
 
         if ($discount < 1) {
             throw CouponException::noDiscount();
@@ -264,6 +319,7 @@ class CouponService
     private function priceCart(array $items): array
     {
         $quantities = [];
+
         foreach ($items as $item) {
             $id = (int) $item['variant_id'];
             $quantities[$id] = ($quantities[$id] ?? 0) + (int) $item['quantity'];
@@ -273,10 +329,11 @@ class CouponService
             throw CouponException::itemsUnavailable();
         }
 
-        // dd(array_keys($quantities), ProductVariant::findOrFail(array_keys($quantities)));
         $variants = ProductVariant::query()
+            ->with('product:id,brand_id')
             ->whereIn('id', array_keys($quantities))
             ->whereHas('product', fn ($product) => $product
+                ->whereNull('products.deleted_at') // the variant's product relation also finds deleted products
                 ->where('status', ProductStatus::Published->value)
                 ->whereHas('brand', fn ($brand) => $brand->where('is_active', true))
                 ->whereHas('collection', fn ($collection) => $collection->where('is_active', true)))
@@ -291,12 +348,15 @@ class CouponService
         $total = 0;
 
         foreach ($quantities as $id => $quantity) {
-            $unit = $this->toCents($variants[$id]->price);
+            $variant = $variants[$id];
+            $unit = $this->toCents($variant->price);
             $line = $unit * $quantity;
             $total += $line;
 
             $lines[] = [
                 'variant_id' => $id,
+                'product_id' => (int) $variant->product_id,
+                'brand_id' => (int) $variant->product->brand_id,
                 'quantity' => $quantity,
                 'unit_cents' => $unit,
                 'line_cents' => $line,
@@ -312,18 +372,24 @@ class CouponService
     }
 
     /**
-     * Splits the discount over the lines. Left-over cents go to the last lines first,
+     * Splits the discount over the covered lines only. Left-over cents go to the last lines first,
      * and never above a line's own price. The Orders module needs this split for refunds.
      *
-     * @param  array<int, array<string, int>>  $lines
-     * @return array<int, array<string, int>>
+     * @param  array<int, array<string, mixed>>  $lines
+     * @return array<int, array<string, mixed>>
      */
-    private function allocate(array $lines, int $discount, int $total): array
+    private function allocate(array $lines, int $discount, int $eligibleTotal): array
     {
         $allocated = 0;
 
         foreach ($lines as $i => $line) {
-            $share = intdiv($discount * $line['line_cents'], $total);
+            if (! $line['eligible']) {
+                $lines[$i]['discount_cents'] = 0;
+
+                continue;
+            }
+
+            $share = intdiv($discount * $line['line_cents'], $eligibleTotal);
             $lines[$i]['discount_cents'] = $share;
             $allocated += $share;
         }
@@ -331,11 +397,18 @@ class CouponService
         $remainder = $discount - $allocated;
 
         while ($remainder > 0) {
+            $moved = false;
+
             for ($i = count($lines) - 1; $i >= 0 && $remainder > 0; $i--) {
-                if ($lines[$i]['discount_cents'] < $lines[$i]['line_cents']) {
+                if ($lines[$i]['eligible'] && $lines[$i]['discount_cents'] < $lines[$i]['line_cents']) {
                     $lines[$i]['discount_cents']++;
                     $remainder--;
+                    $moved = true;
                 }
+            }
+
+            if (! $moved) {
+                break;
             }
         }
 
@@ -343,26 +416,29 @@ class CouponService
     }
 
     /**
-     * @param  array<int, array<string, int>>  $lines
+     * @param  array{lines: array<int, array<string, mixed>>, total: int, eligible_total: int, discount: int}  $result
      * @return array<string, mixed>
      */
-    private function summary(Coupon $coupon, array $lines, int $total, int $discount): array
+    private function summary(Coupon $coupon, array $result): array
     {
         return [
             'code' => $coupon->code,
             'type' => $coupon->type->value,
+            'scope' => $coupon->scope->value,
             'value' => number_format((float) $coupon->value, 2, '.', ''),
-            'items_total' => $this->fromCents($total),
-            'discount' => $this->fromCents($discount),
-            'total_after_discount' => $this->fromCents($total - $discount),
+            'items_total' => $this->fromCents($result['total']),
+            'eligible_total' => $this->fromCents($result['eligible_total']),
+            'discount' => $this->fromCents($result['discount']),
+            'total_after_discount' => $this->fromCents($result['total'] - $result['discount']),
             'lines' => array_map(fn (array $line) => [
                 'variant_id' => $line['variant_id'],
                 'quantity' => $line['quantity'],
                 'unit_price' => $this->fromCents($line['unit_cents']),
                 'line_total' => $this->fromCents($line['line_cents']),
+                'eligible' => $line['eligible'],
                 'discount' => $this->fromCents($line['discount_cents']),
                 'line_payable' => $this->fromCents($line['line_cents'] - $line['discount_cents']),
-            ], $lines),
+            ], $result['lines']),
         ];
     }
 
