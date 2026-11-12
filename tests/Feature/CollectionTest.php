@@ -5,6 +5,7 @@ use App\Models\Collection;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 
 uses(RefreshDatabase::class);
@@ -201,5 +202,85 @@ describe('when logged in', function () {
 
     it('returns 404 when deleting a missing collection', function () {
         $this->deleteJson('/api/collections/999')->assertNotFound();
+    });
+
+    it('lists the collections of all brands', function () {
+        Collection::factory()->count(2)->create(['brand_id' => $this->brand->id]);
+        Collection::factory()->count(3)->create();
+
+        $this->getJson('/api/collections')
+            ->assertOk()
+            ->assertJsonPath('meta.total', 5)
+            ->assertJsonStructure(['data' => [['id', 'name', 'slug', 'products_count', 'brand' => ['id', 'name', 'slug']]]]);
+    });
+
+    it('filters the collection list by brand_id', function () {
+        Collection::factory()->count(2)->create(['brand_id' => $this->brand->id]);
+        Collection::factory()->count(3)->create();
+
+        $this->getJson("/api/collections?brand_id={$this->brand->id}")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 2);
+    });
+
+    it('rejects a brand_id that does not exist in the collection list', function () {
+        $this->getJson('/api/collections?brand_id=999')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('brand_id');
+    });
+
+    it('filters the collection list by is_active', function () {
+        Collection::factory()->create(['brand_id' => $this->brand->id]);
+        Collection::factory()->create(['brand_id' => $this->brand->id, 'is_active' => false]);
+
+        $this->getJson('/api/collections?is_active=0')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.is_active', false);
+    });
+
+    it('supports per_page and rejects bad paging values', function () {
+        Collection::factory()->count(8)->create(['brand_id' => $this->brand->id]);
+
+        $this->getJson('/api/collections?per_page=5')
+            ->assertOk()
+            ->assertJsonCount(5, 'data')
+            ->assertJsonPath('meta.per_page', 5)
+            ->assertJsonPath('meta.last_page', 2);
+
+        $this->getJson('/api/collections?per_page=101')->assertStatus(422)->assertJsonValidationErrors('per_page');
+        $this->getJson('/api/collections?page=0')->assertStatus(422)->assertJsonValidationErrors('page');
+        $this->getJson('/api/collections?page=abc')->assertStatus(422)->assertJsonValidationErrors('page');
+    });
+
+    it('searches the collection list by name', function () {
+        Collection::factory()->create(['brand_id' => $this->brand->id, 'name' => 'Kitchen']);
+        Collection::factory()->create(['brand_id' => $this->brand->id, 'name' => 'Bedroom']);
+
+        $this->getJson('/api/collections?search=kit')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', 'Kitchen');
+    });
+
+    it('matches a percent sign in the search literally', function () {
+        Collection::factory()->create(['brand_id' => $this->brand->id, 'name' => '50% Off']);
+        Collection::factory()->create(['brand_id' => $this->brand->id, 'name' => 'Other']);
+
+        $this->getJson('/api/collections?search=%25')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', '50% Off');
+    })->skip(fn () => DB::connection()->getDriverName() === 'sqlite', 'SQLite has no default LIKE escape character.');
+
+    it('lets the brand in the url win over the brand_id filter', function () {
+        $other = Brand::factory()->create();
+        Collection::factory()->create(['brand_id' => $this->brand->id, 'name' => 'Mine']);
+        Collection::factory()->create(['brand_id' => $other->id, 'name' => 'Not mine']);
+
+        $this->getJson("/api/brands/{$this->brand->id}/collections?brand_id={$other->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', 'Mine');
     });
 });
