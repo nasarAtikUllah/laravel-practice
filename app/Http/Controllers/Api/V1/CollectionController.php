@@ -13,14 +13,28 @@ use Illuminate\Http\Request;
 
 class CollectionController extends Controller
 {
-    public function index(Request $request, Brand $brand): JsonResponse
+    public function index(Request $request, ?Brand $brand = null): JsonResponse
     {
-        $collections = $brand->collections()
-            ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%'.$request->string('search').'%'))
-            ->when($request->has('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')))
+        $request->validate([
+            'search' => ['nullable', 'string', 'max:100'],
+            'is_active' => ['nullable', 'boolean'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
+        ]);
+
+        $brandId = $brand?->id ?? ($request->filled('brand_id') ? $request->integer('brand_id') : null);
+        $search = trim((string) $request->input('search'));
+
+        $collections = Collection::query()
+            ->with('brand:id,name,slug')
+            ->when($brandId, fn ($q) => $q->where('brand_id', $brandId))
+            ->when($search !== '', fn ($q) => $q->where('name', 'like', '%'.addcslashes($search, '%_\\').'%'))
+            ->when($request->filled('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')))
             ->withCount('products')
             ->latest('id')
-            ->paginate(15);
+            ->paginate($request->integer('per_page', 15))
+            ->withQueryString();
 
         return $this->paginated($collections, CollectionResource::class, 'Collections retrieved successfully.');
     }

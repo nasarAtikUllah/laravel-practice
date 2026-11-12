@@ -11,11 +11,21 @@ use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'status' => ['nullable', Rule::enum(ProductStatus::class)],
+            'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
+            'collection_id' => ['nullable', 'integer', 'exists:collections,id'],
+            'search' => ['nullable', 'string', 'max:100'],
+        ]);
+
         $products = Product::query()
             ->with(['brand:id,name,slug', 'collection:id,name,slug', 'media'])
             ->withCount('variants')
@@ -25,7 +35,8 @@ class ProductController extends Controller
             ->when($request->filled('brand_id'), fn ($q) => $q->where('brand_id', $request->integer('brand_id')))
             ->when($request->filled('collection_id'), fn ($q) => $q->where('collection_id', $request->integer('collection_id')))
             ->latest('id')
-            ->paginate(15);
+            ->paginate($request->integer('per_page', 15))
+            ->withQueryString();
 
         return $this->paginated($products, ProductResource::class, 'Products retrieved successfully.');
     }
