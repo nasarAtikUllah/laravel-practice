@@ -23,9 +23,7 @@ class InventoryController extends Controller
 
         $variants = ProductVariant::query()
             ->with('product:id,name,slug')
-            // out: nothing left to sell
             ->when($filter === 'out', fn ($q) => $q->whereColumn('stock', '<=', 'reserved'))
-            // low: something left, but at or under the low-stock level
             ->when($filter === 'low', fn ($q) => $q
                 ->whereColumn('stock', '>', 'reserved')
                 ->whereRaw('stock <= reserved + low_stock_threshold'))

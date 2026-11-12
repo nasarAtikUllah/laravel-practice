@@ -41,7 +41,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
     Route::apiResource('brands', BrandController::class);
-    Route::apiResource('brands.collections', CollectionController::class)->shallow();
+    Route::apiResource('brands.collections', CollectionController::class)
+        ->shallow()
+        ->only(['index', 'store']);
+
+    Route::apiResource('collections', CollectionController::class)
+        ->only(['index', 'show', 'update', 'destroy']);
 
     Route::apiResource('products', ProductController::class);
     Route::apiResource('products.variants', ProductVariantController::class)->shallow();
