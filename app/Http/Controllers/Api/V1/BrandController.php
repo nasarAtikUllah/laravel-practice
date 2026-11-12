@@ -9,6 +9,7 @@ use App\Http\Resources\BrandResource;
 use App\Models\Brand;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class BrandController extends Controller
 {
@@ -53,7 +54,9 @@ class BrandController extends Controller
         if ($brand->collections()->exists()) {
             return $this->error('This brand has collections. Delete or move them first.', 409);
         }
-
+        if (DB::table('coupon_brand')->where('brand_id', $brand->id)->exists()) {
+            return $this->error('This brand is used by one or more coupons. Remove it from those coupons first.', 409);
+        }
         $brand->delete();
 
         return $this->success(null, 'Brand deleted successfully.');

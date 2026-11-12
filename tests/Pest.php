@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Brand;
 use App\Models\Collection;
 use App\Models\Coupon;
 use App\Models\CouponRedemption;
@@ -84,6 +85,21 @@ function makeRedemption(Coupon $coupon, ?User $user = null, array $attributes = 
         'discount_amount' => 100,
         'status' => 'redeemed',
     ], $attributes));
+}
+
+/** A buyable variant whose product belongs to the given brand. */
+function buyableForBrand(Brand $brand, float $price = 1000): ProductVariant
+{
+    $collection = Collection::factory()->create(['brand_id' => $brand->id]);
+    $product = makeProduct(['collection_id' => $collection->id], 0);
+
+    return ProductVariant::factory()->create([
+        'product_id' => $product->id,
+        'price' => $price,
+        'compare_price' => null,
+        'stock' => 10,
+        'reserved' => 0,
+    ]);
 }
 /*
 |--------------------------------------------------------------------------

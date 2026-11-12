@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1;
 
+use App\Enums\CouponScope;
 use App\Enums\CouponType;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -29,6 +30,7 @@ class UpdateCouponRequest extends FormRequest
         $coupon = $this->route('coupon');
         $type = fn (): string => (string) $this->input('type', $coupon->type->value);
         $value = fn () => $this->input('value', $coupon->value);
+        $scope = fn (): string => (string) $this->input('scope', $coupon->scope->value);
 
         return [
             'code' => ['prohibited'],
@@ -40,6 +42,35 @@ class UpdateCouponRequest extends FormRequest
                     }
                 },
             ],
+            'scope' => ['sometimes', 'required', Rule::enum(CouponScope::class)],
+            'brand_ids' => [
+                Rule::requiredIf(fn () => $scope() === CouponScope::Brands->value && $coupon->scope !== CouponScope::Brands),
+                'array', 'max:100',
+                function (string $attribute, mixed $given, Closure $fail) use ($scope) {
+                    if ($scope() !== CouponScope::Brands->value && ! empty($given)) {
+                        $fail('Brands can only be set when the scope is brands.');
+                    }
+
+                    if ($scope() === CouponScope::Brands->value && $given === []) {
+                        $fail('Select at least one brand.');
+                    }
+                },
+            ],
+            'brand_ids.*' => ['integer', 'distinct', Rule::exists('brands', 'id')],
+            'product_ids' => [
+                Rule::requiredIf(fn () => $scope() === CouponScope::Products->value && $coupon->scope !== CouponScope::Products),
+                'array', 'max:100',
+                function (string $attribute, mixed $given, Closure $fail) use ($scope) {
+                    if ($scope() !== CouponScope::Products->value && ! empty($given)) {
+                        $fail('Products can only be set when the scope is products.');
+                    }
+
+                    if ($scope() === CouponScope::Products->value && $given === []) {
+                        $fail('Select at least one product.');
+                    }
+                },
+            ],
+            'product_ids.*' => ['integer', 'distinct', Rule::exists('products', 'id')->whereNull('deleted_at')],
             'value' => [
                 'sometimes', 'required', 'numeric', 'decimal:0,2', 'gt:0', 'max:9999999999',
                 function (string $attribute, mixed $given, Closure $fail) use ($type) {
@@ -96,6 +127,12 @@ class UpdateCouponRequest extends FormRequest
     {
         return [
             'code.prohibited' => 'The coupon code cannot be changed. Create a new coupon instead.',
+            'brand_ids.required' => 'Select at least one brand for a brand coupon.',
+            'brand_ids.prohibited' => 'Brands can only be set when the scope is brands.',
+            'brand_ids.*.exists' => 'One of the selected brands does not exist.',
+            'product_ids.required' => 'Select at least one product for a product coupon.',
+            'product_ids.prohibited' => 'Products can only be set when the scope is products.',
+            'product_ids.*.exists' => 'One of the selected products does not exist.',
         ];
     }
 }
