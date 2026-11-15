@@ -24,7 +24,7 @@ it('rejects guests on every product route', function () {
 
 describe('when logged in', function () {
     beforeEach(function () {
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->admin()->create());
         $this->brand = Brand::factory()->create();
         $this->collection = Collection::factory()->create(['brand_id' => $this->brand->id]);
     });

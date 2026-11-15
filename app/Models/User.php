@@ -35,10 +35,12 @@ class User extends Authenticatable
 
     public function canManageInventory(): bool
     {
-        return in_array($this->role, [
-            UserRole::Admin,
-            UserRole::Staff,
-        ], true);
+        return in_array($this->role, [UserRole::Admin, UserRole::Staff], true);
+    }
+
+    public function canManageCatalog(): bool
+    {
+        return in_array($this->role, [UserRole::Admin, UserRole::Staff], true);
     }
 
     public function products()

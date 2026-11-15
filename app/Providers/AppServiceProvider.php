@@ -28,9 +28,8 @@ class AppServiceProvider extends ServiceProvider
             ->by('inventory:'.($request->user()->id ?? $request->ip())));
 
         Gate::define('manage-inventory', fn (User $user) => $user->canManageInventory());
-
+        Gate::define('manage-catalog', fn (User $user) => $user->canManageCatalog());
         Gate::define('manage-coupons', fn (User $user) => $user->isAdmin());
-
         RateLimiter::for('coupon-quote', fn (Request $request) => Limit::perMinute((int) config('coupons.quote_attempts_per_minute', 20))
             ->by('coupon-quote:'.($request->user()->id ?? $request->ip())));
 

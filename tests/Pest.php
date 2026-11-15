@@ -9,7 +9,16 @@ use App\Models\ProductVariant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
+
+function actingAsAdmin(): User
+{
+    $user = User::factory()->admin()->create();
+    Sanctum::actingAs($user);
+
+    return $user;
+}
 
 function makeProduct(array $attributes = [], int $variants = 1): Product
 {

@@ -22,7 +22,7 @@ it('rejects guests on the image routes', function () {
 describe('product featured image', function () {
     beforeEach(function () {
         Storage::fake('public');
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->admin()->create());
         $this->product = makeProduct();
         $this->url = "/api/products/{$this->product->id}/featured-image";
     });
@@ -122,7 +122,7 @@ describe('product featured image', function () {
 describe('variant images', function () {
     beforeEach(function () {
         Storage::fake('public');
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->admin()->create());
         $this->product = makeProduct([], 0);
         $this->variant = ProductVariant::factory()->create(['product_id' => $this->product->id]);
         $this->url = "/api/variants/{$this->variant->id}/images";
