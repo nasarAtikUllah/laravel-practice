@@ -40,26 +40,29 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/profile', [AuthController::class, 'profile']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    Route::apiResource('brands', BrandController::class);
-    Route::apiResource('brands.collections', CollectionController::class)
-        ->shallow()
-        ->only(['index', 'store']);
+    // Catalog management: admin and staff only
+    Route::middleware('can:manage-catalog')->group(function () {
+        Route::apiResource('brands', BrandController::class);
+        Route::apiResource('brands.collections', CollectionController::class)
+            ->shallow()
+            ->only(['index', 'store']);
 
-    Route::apiResource('collections', CollectionController::class)
-        ->only(['index', 'show', 'update', 'destroy']);
+        Route::apiResource('collections', CollectionController::class)
+            ->only(['index', 'show', 'update', 'destroy']);
 
-    Route::apiResource('products', ProductController::class);
-    Route::apiResource('products.variants', ProductVariantController::class)->shallow();
+        Route::apiResource('products', ProductController::class);
+        Route::apiResource('products.variants', ProductVariantController::class)->shallow();
 
-    Route::post('/products/{product}/featured-image', [ProductImageController::class, 'store']);
-    Route::delete('/products/{product}/featured-image', [ProductImageController::class, 'destroy']);
-    Route::post('/variants/{variant}/images', [VariantImageController::class, 'store']);
-    Route::delete('/variants/{variant}/images/{mediaId}', [VariantImageController::class, 'destroy'])->whereNumber('mediaId');
+        Route::post('/products/{product}/featured-image', [ProductImageController::class, 'store']);
+        Route::delete('/products/{product}/featured-image', [ProductImageController::class, 'destroy']);
+        Route::post('/variants/{variant}/images', [VariantImageController::class, 'store']);
+        Route::delete('/variants/{variant}/images/{mediaId}', [VariantImageController::class, 'destroy'])->whereNumber('mediaId');
+    });
 
+    // Inventory: separate group, NOT inside the catalog group
     Route::middleware(['can:manage-inventory', 'throttle:inventory'])->group(function () {
         Route::get('/inventory', [InventoryController::class, 'index']);
 
-        // withTrashed: the history of a deleted variant must stay readable
         Route::get('/variants/{variant}/stock-movements', [StockMovementController::class, 'index'])->withTrashed();
 
         Route::post('/variants/{variant}/stock/adjust', [StockController::class, 'adjust']);
@@ -70,8 +73,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware(['can:manage-coupons', 'throttle:coupon-admin'])->group(function () {
         Route::apiResource('coupons', CouponController::class);
-
-        // withTrashed: the history of a deleted coupon must stay readable
         Route::get('/coupons/{coupon}/redemptions', [CouponRedemptionController::class, 'index'])->withTrashed();
     });
 });

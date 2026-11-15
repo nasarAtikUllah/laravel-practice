@@ -37,7 +37,7 @@ it('rejects guests on every variant route', function () {
 
 describe('when logged in', function () {
     beforeEach(function () {
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->admin()->create());
         $this->product = makeProduct(['status' => ProductStatus::Draft], 0);
         $this->url = "/api/products/{$this->product->id}/variants";
     });

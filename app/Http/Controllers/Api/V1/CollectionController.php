@@ -23,7 +23,7 @@ class CollectionController extends Controller
             'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
         ]);
 
-        $brandId = $brand?->id ?? ($request->filled('brand_id') ? $request->integer('brand_id') : null);
+        $brandId = $brand->id ?? ($request->filled('brand_id') ? $request->integer('brand_id') : null);
         $search = trim((string) $request->input('search'));
 
         $collections = Collection::query()

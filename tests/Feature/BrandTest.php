@@ -21,7 +21,7 @@ it('rejects guests on every brand route', function () {
 
 describe('when logged in', function () {
     beforeEach(function () {
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->admin()->create());
     });
 
     // ---------- LIST ----------

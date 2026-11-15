@@ -243,7 +243,7 @@ describe('when admin', function () {
 
 describe('quote', function () {
     beforeEach(function () {
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->admin()->create());
     });
 
     it('shows which lines the coupon covers', function () {

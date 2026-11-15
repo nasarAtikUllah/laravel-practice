@@ -27,7 +27,7 @@ it('rejects guests on every inventory route', function () {
 });
 
 it('rejects customers on every inventory route', function () {
-    Sanctum::actingAs(User::factory()->create());
+    Sanctum::actingAs(User::factory()->create());   // customer
     $variant = variantWithStock();
     $body = ['type' => 'restock', 'quantity' => 5];
 
