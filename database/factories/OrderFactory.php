@@ -23,7 +23,7 @@ class OrderFactory extends Factory
     public function definition(): array
     {
         return [
-            'number' => 'ORD-'.now()->format('YY-m-d').'-'.fake()->unique()->numerify('######'),
+            'number' => 'ORD-'.now()->format('ymd').'-'.sprintf('%06d', fake()->unique()->numberBetween(500000, 999999)),
             'user_id' => User::factory(),
             'status' => OrderStatus::PendingConfirmation,
             'payment_method' => PaymentMethod::Cod,

@@ -30,6 +30,16 @@ class OrderException extends DomainException
         return new self('Some items are no longer available in the quantity you chose. Please review your cart.', 409);
     }
 
+    public static function cannotCancel(): self
+    {
+        return new self('This order can no longer be cancelled.', 409);
+    }
+
+    public static function paidNeedsRefund(): self
+    {
+        return new self('This order has already been paid. Please contact us to cancel it and get a refund.', 409);
+    }
+
     public function render(Request $request): JsonResponse
     {
         return response()->json(array_filter([

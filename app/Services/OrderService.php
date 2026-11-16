@@ -5,8 +5,10 @@ namespace App\Services;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
+use App\Enums\ReservationStatus;
 use App\Exceptions\InsufficientStockException;
 use App\Exceptions\OrderException;
+use App\Models\InventoryReservation;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderStatusHistory;
@@ -93,7 +95,7 @@ class OrderService
         };
 
         $order = Order::create([
-            'number' => 'TMP-'.Str::uuid(), // replaced below, when the id is known
+            'number' => 'TMP-' . Str::uuid(), // replaced below, when the id is known
             'user_id' => $user->id,
             'status' => $status,
             'payment_method' => $method,
@@ -117,8 +119,7 @@ class OrderService
             'confirmed_at' => $status === OrderStatus::Confirmed ? now() : null,
         ]);
 
-        $order->update(['number' => sprintf('ORD-%s-%06d', now()->format('YY-m-d'), $order->id)]);
-
+        $order->update(['number' => Order::numberFor($order->id)]);
         foreach ($data['lines'] as $line) {
             OrderItem::create([
                 'order_id' => $order->id,
@@ -187,5 +188,66 @@ class OrderService
         $this->carts->emptyAfterOrder($cart);
 
         return $order->load(['items', 'statusHistory']);
+    }
+
+    /**
+     * Cancels an order and gives back what it took: the stock and the coupon use.
+     * The order row is locked, so a cancel and any other change to the order cannot overlap.
+     */
+    public function cancel(Order $order, User $by, ?string $reason = null): Order
+    {
+        return DB::transaction(function () use ($order, $by, $reason) {
+            $locked = Order::lockForUpdate()->findOrFail($order->id);
+
+            if (! $locked->status->canMoveTo(OrderStatus::Cancelled)) {
+                throw OrderException::cannotCancel();
+            }
+
+            // A paid order needs a refund first (Day 4).
+            if ($locked->payment_status === PaymentStatus::Paid) {
+                throw OrderException::paidNeedsRefund();
+            }
+
+            $reason = trim((string) $reason) !== ''
+                ? trim((string) $reason)
+                : ($by->id === $locked->user_id ? 'Cancelled by customer' : 'Cancelled by staff');
+
+            if ($locked->status === OrderStatus::PendingPayment) {
+                // Online order: the stock was only held.
+                InventoryReservation::query()
+                    ->where('reference_type', 'order')
+                    ->where('reference_id', $locked->id)
+                    ->where('status', ReservationStatus::Active->value)
+                    ->orderBy('product_variant_id')
+                    ->get()
+                    ->each(fn (InventoryReservation $reservation) => $this->inventory->releaseReservation($reservation));
+            } else {
+                // The stock was sold at checkout. Put it back.
+                $this->inventory->restoreStockForOrder('order', $locked->id, $reason, $by);
+            }
+
+            // Gives back the coupon use, held or counted.
+            $this->coupons->releaseForOrder('order', $locked->id);
+
+            $from = $locked->status;
+
+            $locked->update([
+                'status' => OrderStatus::Cancelled,
+                'cancelled_at' => now(),
+                'cancel_reason' => $reason,
+                'cancelled_by' => $by->id,
+                'expires_at' => null,
+            ]);
+
+            OrderStatusHistory::create([
+                'order_id' => $locked->id,
+                'from_status' => $from,
+                'to_status' => OrderStatus::Cancelled,
+                'user_id' => $by->id,
+                'note' => $reason,
+            ]);
+
+            return $locked;
+        });
     }
 }

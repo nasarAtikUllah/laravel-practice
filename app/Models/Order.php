@@ -85,6 +85,14 @@ class Order extends Model
         ];
     }
 
+    /** An order number looks like ORD-261117-000042: the placed date (ymd), then the order id. */
+    public const NUMBER_PATTERN = 'ORD-[0-9]{6}-[0-9]{6,}';
+
+    public static function numberFor(int $id): string
+    {
+        return sprintf('ORD-%s-%06d', now()->format('ymd'), $id);
+    }
+
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
@@ -101,5 +109,12 @@ class Order extends Model
     public function statusHistory(): HasMany
     {
         return $this->hasMany(OrderStatusHistory::class)->orderBy('id');
+    }
+
+    /** A customer may cancel before shipping, but only when nothing was paid. */
+    public function isCancellableByCustomer(): bool
+    {
+        return $this->status->canMoveTo(OrderStatus::Cancelled)
+            && $this->payment_status !== PaymentStatus::Paid;
     }
 }

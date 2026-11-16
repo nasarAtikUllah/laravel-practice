@@ -53,7 +53,7 @@ it('places a cash on delivery order', function () {
     expect($order->discount_total)->toBe('0.00');
     expect($order->delivery_fee)->toBe('60.00');
     expect($order->grand_total)->toBe('2060.00');
-    expect($order->number)->toBe(sprintf('ORD-%s-%06d', now()->format('YY-m-d'), $order->id));
+    expect($order->number)->toBe(Order::numberFor($order->id));
     expect($order->placed_at->toDateTimeString())->toBe(now()->toDateTimeString());
     expect($order->expires_at->toDateTimeString())->toBe(now()->addHours(24)->toDateTimeString());
     expect($order->confirmed_at)->toBeNull();
