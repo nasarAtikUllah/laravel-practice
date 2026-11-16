@@ -329,14 +329,21 @@ class CouponService
             throw CouponException::itemsUnavailable();
         }
 
+        // $variants = ProductVariant::query()
+        //     ->with('product:id,brand_id')
+        //     ->whereIn('id', array_keys($quantities))
+        //     ->whereHas('product', fn ($product) => $product
+        //         ->whereNull('products.deleted_at') // the variant's product relation also finds deleted products
+        //         ->where('status', ProductStatus::Published->value)
+        //         ->whereHas('brand', fn ($brand) => $brand->where('is_active', true))
+        //         ->whereHas('collection', fn ($collection) => $collection->where('is_active', true)))
+        //     ->get()
+        //     ->keyBy('id');
+
         $variants = ProductVariant::query()
             ->with('product:id,brand_id')
             ->whereIn('id', array_keys($quantities))
-            ->whereHas('product', fn ($product) => $product
-                ->whereNull('products.deleted_at') // the variant's product relation also finds deleted products
-                ->where('status', ProductStatus::Published->value)
-                ->whereHas('brand', fn ($brand) => $brand->where('is_active', true))
-                ->whereHas('collection', fn ($collection) => $collection->where('is_active', true)))
+            ->purchasable()
             ->get()
             ->keyBy('id');
 
