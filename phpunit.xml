@@ -32,5 +32,11 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="SHOP_CURRENCY" value="BDT"/>
+        <env name="SHOP_CURRENCY_SYMBOL" value="৳"/>
+        <env name="FREE_DELIVERY_MIN_ORDER" value="5000"/>
+        <env name="DELIVERY_FEE" value="0"/>
+        <env name="CART_MAX_QUANTITY" value="20"/>
+        <env name="CART_MAX_LINES" value="30"/>
     </php>
 </phpunit>

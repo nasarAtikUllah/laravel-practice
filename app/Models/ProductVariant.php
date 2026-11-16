@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\ProductStatus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -93,5 +95,21 @@ class ProductVariant extends Model implements HasMedia
     public function reservations(): HasMany
     {
         return $this->hasMany(InventoryReservation::class);
+    }
+
+    /**
+     * What a customer may buy: the variant is not deleted, and its product is
+     * published with an active brand and an active collection.
+     *
+     * @param  Builder<ProductVariant>  $query
+     * @return Builder<ProductVariant>
+     */
+    public function scopePurchasable(Builder $query): Builder
+    {
+        return $query->whereHas('product', fn ($product) => $product
+            ->whereNull('products.deleted_at') // the product relation also finds deleted products
+            ->where('status', ProductStatus::Published->value)
+            ->whereHas('brand', fn ($brand) => $brand->where('is_active', true))
+            ->whereHas('collection', fn ($collection) => $collection->where('is_active', true)));
     }
 }

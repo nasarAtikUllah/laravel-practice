@@ -50,8 +50,7 @@ return [
     |
     */
 
-    'expiration' => null,
-
+    'expiration' => env('SANCTUM_EXPIRATION_MINUTES', 60 * 24 * 7), // 7 days
     /*
     |--------------------------------------------------------------------------
     | Token Prefix

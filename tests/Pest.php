@@ -6,6 +6,7 @@ use App\Models\Coupon;
 use App\Models\CouponRedemption;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\ShippingOption;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -163,4 +164,14 @@ function makeProductWithoutStock(array $attributes = [], int $variants = 1): Pro
     ProductVariant::factory()->count($variants)->create(['product_id' => $product->id, 'stock' => 0, 'reserved' => 0]);
 
     return $product;
+}
+
+/** The three delivery options, as the seeder creates them. */
+function seedShipping(): array
+{
+    return [
+        'inside' => ShippingOption::factory()->asDefault()->create(['code' => 'inside-city', 'name' => 'Inside city delivery', 'fee' => 60, 'sort_order' => 10]),
+        'outside' => ShippingOption::factory()->create(['code' => 'outside-city', 'name' => 'Outside city delivery', 'fee' => 120, 'sort_order' => 20]),
+        'free' => ShippingOption::factory()->freeFrom(5000)->create(['code' => 'free-delivery', 'name' => 'Free delivery', 'sort_order' => 30]),
+    ];
 }

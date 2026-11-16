@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BrandController;
+use App\Http\Controllers\Api\V1\CartController;
 use App\Http\Controllers\Api\V1\CollectionController;
 use App\Http\Controllers\Api\V1\CouponController;
 use App\Http\Controllers\Api\V1\CouponQuoteController;
@@ -10,16 +11,18 @@ use App\Http\Controllers\Api\V1\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Frontend\BrandController as FrontendBrandController;
 use App\Http\Controllers\Api\V1\Frontend\CollectionController as FrontendCollectionController;
 use App\Http\Controllers\Api\V1\Frontend\ProductController as FrontendProductController;
+use App\Http\Controllers\Api\V1\Frontend\ShippingOptionController as FrontendShippingOptionController;
 use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\ProductImageController;
 use App\Http\Controllers\Api\V1\ProductVariantController;
+use App\Http\Controllers\Api\V1\ShippingOptionController;
 use App\Http\Controllers\Api\V1\StockController;
 use App\Http\Controllers\Api\V1\StockMovementController;
 use App\Http\Controllers\Api\V1\VariantImageController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('frontend')->middleware('throttle:60,1')->group(function () {
+Route::prefix('frontend')->middleware('throttle:public-api')->group(function () {
     Route::get('/brands', [FrontendBrandController::class, 'index']);
     Route::get('/brands/{slug}', [FrontendBrandController::class, 'show']);
 
@@ -28,9 +31,13 @@ Route::prefix('frontend')->middleware('throttle:60,1')->group(function () {
 
     Route::get('/products', [FrontendProductController::class, 'index']);
     Route::get('/products/{slug}', [FrontendProductController::class, 'show']);
+
+    // inside the "frontend" group:
+    Route::get('/shipping-options', [FrontendShippingOptionController::class, 'index']);
+
 });
 
-Route::post('/register', [AuthController::class, 'register']);
+Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:register');
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink'])->middleware('throttle:5,1');
@@ -53,9 +60,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('products', ProductController::class);
         Route::apiResource('products.variants', ProductVariantController::class)->shallow();
 
-        Route::post('/products/{product}/featured-image', [ProductImageController::class, 'store']);
+        Route::post('/products/{product}/featured-image', [ProductImageController::class, 'store'])->middleware('throttle:uploads');
         Route::delete('/products/{product}/featured-image', [ProductImageController::class, 'destroy']);
-        Route::post('/variants/{variant}/images', [VariantImageController::class, 'store']);
+        Route::post('/variants/{variant}/images', [VariantImageController::class, 'store'])->middleware('throttle:uploads');
         Route::delete('/variants/{variant}/images/{mediaId}', [VariantImageController::class, 'destroy'])->whereNumber('mediaId');
     });
 
@@ -74,5 +81,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware(['can:manage-coupons', 'throttle:coupon-admin'])->group(function () {
         Route::apiResource('coupons', CouponController::class);
         Route::get('/coupons/{coupon}/redemptions', [CouponRedemptionController::class, 'index'])->withTrashed();
+    });
+
+    Route::middleware(['can:manage-shipping', 'throttle:shipping-admin'])->group(function () {
+        Route::apiResource('shipping-options', ShippingOptionController::class)
+            ->parameters(['shipping-options' => 'shippingOption']);
+    });
+
+    Route::middleware('throttle:cart')->prefix('cart')->group(function () {
+        Route::get('/', [CartController::class, 'show']);
+        Route::delete('/', [CartController::class, 'clear']);
+        Route::post('/items', [CartController::class, 'addItem']);
+        Route::patch('/items/{variantId}', [CartController::class, 'updateItem'])->whereNumber('variantId');
+        Route::delete('/items/{variantId}', [CartController::class, 'removeItem'])->whereNumber('variantId');
+        Route::put('/coupon', [CartController::class, 'applyCoupon']);
+        Route::delete('/coupon', [CartController::class, 'removeCoupon']);
+        Route::post('/prepare', [CartController::class, 'prepare']);
+        Route::put('/shipping', [CartController::class, 'selectShipping']);
     });
 });
