@@ -15,6 +15,7 @@ use App\Models\OrderStatusHistory;
 use App\Models\ProductVariant;
 use App\Models\User;
 use App\Support\Money;
+use Closure;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -95,7 +96,7 @@ class OrderService
         };
 
         $order = Order::create([
-            'number' => 'TMP-' . Str::uuid(), // replaced below, when the id is known
+            'number' => 'TMP-'.Str::uuid(), // replaced below, when the id is known
             'user_id' => $user->id,
             'status' => $status,
             'payment_method' => $method,
@@ -194,9 +195,9 @@ class OrderService
      * Cancels an order and gives back what it took: the stock and the coupon use.
      * The order row is locked, so a cancel and any other change to the order cannot overlap.
      */
-    public function cancel(Order $order, User $by, ?string $reason = null): Order
+    public function cancel(Order $order, User $by, ?string $reason = null, bool $byStaff = false): Order
     {
-        return DB::transaction(function () use ($order, $by, $reason) {
+        return DB::transaction(function () use ($order, $by, $reason, $byStaff) {
             $locked = Order::lockForUpdate()->findOrFail($order->id);
 
             if (! $locked->status->canMoveTo(OrderStatus::Cancelled)) {
@@ -205,12 +206,12 @@ class OrderService
 
             // A paid order needs a refund first (Day 4).
             if ($locked->payment_status === PaymentStatus::Paid) {
-                throw OrderException::paidNeedsRefund();
+                throw $byStaff ? OrderException::paidNeedsRefundByStaff() : OrderException::paidNeedsRefund();
             }
 
             $reason = trim((string) $reason) !== ''
                 ? trim((string) $reason)
-                : ($by->id === $locked->user_id ? 'Cancelled by customer' : 'Cancelled by staff');
+                : ($byStaff ? 'Cancelled by staff' : 'Cancelled by customer');
 
             if ($locked->status === OrderStatus::PendingPayment) {
                 // Online order: the stock was only held.
@@ -249,5 +250,91 @@ class OrderService
 
             return $locked;
         });
+    }
+
+    // ---------- Staff: confirm, ship, deliver ----------
+
+    /** Cash on delivery: staff called the customer and confirmed the order. */
+    public function confirm(Order $order, User $by, ?string $note = null): Order
+    {
+        return $this->move(
+            $order,
+            [OrderStatus::PendingConfirmation],
+            OrderStatus::Confirmed,
+            $by,
+            $this->clean($note) ?? 'Confirmed by staff',
+            OrderException::notConfirmable(),
+            fn () => ['confirmed_at' => now(), 'expires_at' => null], // no more auto-cancel
+        );
+    }
+
+    public function ship(Order $order, User $by, ?string $note = null): Order
+    {
+        return $this->move(
+            $order,
+            [OrderStatus::Confirmed],
+            OrderStatus::Shipped,
+            $by,
+            $this->clean($note) ?? 'Shipped',
+            OrderException::notShippable(),
+            fn () => ['shipped_at' => now()],
+        );
+    }
+
+    public function deliver(Order $order, User $by, ?string $note = null): Order
+    {
+        $cod = $order->payment_method === PaymentMethod::Cod;
+
+        return $this->move(
+            $order,
+            [OrderStatus::Shipped],
+            OrderStatus::Delivered,
+            $by,
+            $this->clean($note) ?? ($cod ? 'Delivered. Cash collected.' : 'Delivered'),
+            OrderException::notDeliverable(),
+            fn (Order $locked) => ['delivered_at' => now()]
+                + ($locked->payment_method === PaymentMethod::Cod && $locked->payment_status === PaymentStatus::Unpaid
+                    ? ['payment_status' => PaymentStatus::Paid]
+                    : []),
+        );
+    }
+
+    /**
+     * One status change. The order row is locked and the status is checked again inside the lock,
+     * so two staff members cannot move the same order at once.
+     *
+     * @param  array<int, OrderStatus>  $allowedFrom
+     * @param  Closure(Order): array<string, mixed>  $changes
+     */
+    private function move(Order $order, array $allowedFrom, OrderStatus $to, User $by, string $note, OrderException $refusal, Closure $changes): Order
+    {
+        return DB::transaction(function () use ($order, $allowedFrom, $to, $by, $note, $refusal, $changes) {
+            $locked = Order::lockForUpdate()->findOrFail($order->id);
+
+            if (! in_array($locked->status, $allowedFrom, true) || ! $locked->status->canMoveTo($to)) {
+                throw $refusal;
+            }
+
+            $from = $locked->status;
+
+            $locked->update(['status' => $to] + $changes($locked));
+
+            OrderStatusHistory::create([
+                'order_id' => $locked->id,
+                'from_status' => $from,
+                'to_status' => $to,
+                'user_id' => $by->id,
+                'note' => $note,
+            ]);
+
+            return $locked;
+        });
+    }
+
+    private function clean(?string $note): ?string
+    {
+        $note = trim((string) $note);
+
+        return $note === '' ? null : $note;
     }
 }

@@ -54,4 +54,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(Order::class);
     }
+
+    public function canManageOrders(): bool
+    {
+        return in_array($this->role, [UserRole::Admin, UserRole::Staff], true);
+    }
 }

@@ -26,10 +26,27 @@ use Illuminate\Support\Carbon;
  * @property Carbon $placed_at
  * @property Carbon|null $expires_at
  * @property Carbon|null $confirmed_at
+ * @property Carbon|null $shipped_at
+ * @property Carbon|null $delivered_at
+ * @property Carbon|null $cancelled_at
+ * @property string|null $cancel_reason
+ * @property string $shipping_name
+ * @property string $shipping_phone
+ * @property string $shipping_address
+ * @property string $shipping_district
+ * @property string|null $note
+ * @property string|null $coupon_type
+ * @property string|null $coupon_value
+ * @property string|null $coupon_scope
+ * @property string|null $shipping_option_code
+ * @property string|null $shipping_option_name
  */
 class Order extends Model
 {
     use HasFactory;
+
+    /** An order number looks like ORD-261117-000042: the placed date (ymd), then the order id. */
+    public const NUMBER_PATTERN = 'ORD-[0-9]{6}-[0-9]{6,}';
 
     protected $fillable = [
         'number',
@@ -85,9 +102,6 @@ class Order extends Model
         ];
     }
 
-    /** An order number looks like ORD-261117-000042: the placed date (ymd), then the order id. */
-    public const NUMBER_PATTERN = 'ORD-[0-9]{6}-[0-9]{6,}';
-
     public static function numberFor(int $id): string
     {
         return sprintf('ORD-%s-%06d', now()->format('ymd'), $id);
@@ -116,5 +130,11 @@ class Order extends Model
     {
         return $this->status->canMoveTo(OrderStatus::Cancelled)
             && $this->payment_status !== PaymentStatus::Paid;
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function canceller(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelled_by');
     }
 }
