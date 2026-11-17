@@ -34,6 +34,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('manage-catalog', fn (User $user) => $user->canManageCatalog());
         Gate::define('manage-coupons', fn (User $user) => $user->isAdmin());
         Gate::define('manage-shipping', fn (User $user) => $user->isAdmin());
+        Gate::define('manage-orders', fn (User $user) => $user->canManageOrders());
 
         RateLimiter::for('coupon-quote', fn (Request $request) => Limit::perMinute((int) config('coupons.quote_attempts_per_minute', 20))
             ->by('coupon-quote:'.($request->user()->id ?? $request->ip())));
@@ -55,5 +56,14 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('public-api', fn (Request $request) => Limit::perMinute((int) config('shop.public_requests_per_minute', 120))
             ->by('public-api:'.$request->ip()));
+
+        RateLimiter::for('orders', fn (Request $request) => Limit::perMinute(120)
+            ->by('orders:'.($request->user()->id ?? $request->ip())));
+
+        RateLimiter::for('checkout', fn (Request $request) => Limit::perMinute(10)
+            ->by('checkout:'.($request->user()->id ?? $request->ip())));
+
+        RateLimiter::for('orders-admin', fn (Request $request) => Limit::perMinute(120)
+            ->by('orders-admin:'.($request->user()->id ?? $request->ip())));
     }
 }

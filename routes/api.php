@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AdminOrderController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BrandController;
 use App\Http\Controllers\Api\V1\CartController;
@@ -10,9 +11,11 @@ use App\Http\Controllers\Api\V1\CouponRedemptionController;
 use App\Http\Controllers\Api\V1\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Frontend\BrandController as FrontendBrandController;
 use App\Http\Controllers\Api\V1\Frontend\CollectionController as FrontendCollectionController;
+use App\Http\Controllers\Api\V1\Frontend\CouponController as FrontendCouponController;
 use App\Http\Controllers\Api\V1\Frontend\ProductController as FrontendProductController;
 use App\Http\Controllers\Api\V1\Frontend\ShippingOptionController as FrontendShippingOptionController;
 use App\Http\Controllers\Api\V1\InventoryController;
+use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\ProductImageController;
 use App\Http\Controllers\Api\V1\ProductVariantController;
@@ -20,6 +23,7 @@ use App\Http\Controllers\Api\V1\ShippingOptionController;
 use App\Http\Controllers\Api\V1\StockController;
 use App\Http\Controllers\Api\V1\StockMovementController;
 use App\Http\Controllers\Api\V1\VariantImageController;
+use App\Models\Order;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('frontend')->middleware('throttle:public-api')->group(function () {
@@ -32,9 +36,10 @@ Route::prefix('frontend')->middleware('throttle:public-api')->group(function () 
     Route::get('/products', [FrontendProductController::class, 'index']);
     Route::get('/products/{slug}', [FrontendProductController::class, 'show']);
 
+    Route::get('/coupons', [FrontendCouponController::class, 'index']);
+
     // inside the "frontend" group:
     Route::get('/shipping-options', [FrontendShippingOptionController::class, 'index']);
-
 });
 
 Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:register');
@@ -98,5 +103,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/coupon', [CartController::class, 'removeCoupon']);
         Route::post('/prepare', [CartController::class, 'prepare']);
         Route::put('/shipping', [CartController::class, 'selectShipping']);
+    });
+
+    Route::middleware('throttle:orders')->prefix('orders')->group(function () {
+        Route::get('/', [OrderController::class, 'index']);
+        Route::post('/', [OrderController::class, 'store'])->middleware('throttle:checkout');
+        Route::get('/{number}', [OrderController::class, 'show'])->where('number', Order::NUMBER_PATTERN);
+        Route::post('/{number}/cancel', [OrderController::class, 'cancel'])->where('number', Order::NUMBER_PATTERN);
+    });
+
+    Route::middleware(['can:manage-orders', 'throttle:orders-admin'])->prefix('admin/orders')->group(function () {
+        Route::get('/', [AdminOrderController::class, 'index']);
+        Route::get('/{number}', [AdminOrderController::class, 'show'])->where('number', Order::NUMBER_PATTERN);
+        Route::post('/{number}/confirm', [AdminOrderController::class, 'confirm'])->where('number', Order::NUMBER_PATTERN);
+        Route::post('/{number}/ship', [AdminOrderController::class, 'ship'])->where('number', Order::NUMBER_PATTERN);
+        Route::post('/{number}/deliver', [AdminOrderController::class, 'deliver'])->where('number', Order::NUMBER_PATTERN);
+        Route::post('/{number}/cancel', [AdminOrderController::class, 'cancel'])->where('number', Order::NUMBER_PATTERN);
     });
 });

@@ -4,12 +4,16 @@ use App\Models\Brand;
 use App\Models\Collection;
 use App\Models\Coupon;
 use App\Models\CouponRedemption;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\ShippingOption;
 use App\Models\User;
+use App\Services\CartService;
+use App\Services\OrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -174,4 +178,42 @@ function seedShipping(): array
         'outside' => ShippingOption::factory()->create(['code' => 'outside-city', 'name' => 'Outside city delivery', 'fee' => 120, 'sort_order' => 20]),
         'free' => ShippingOption::factory()->freeFrom(5000)->create(['code' => 'free-delivery', 'name' => 'Free delivery', 'sort_order' => 30]),
     ];
+}
+
+/** The delivery details a customer types at checkout. */
+function checkoutInput(array $overrides = []): array
+{
+    return array_merge([
+        'payment_method' => 'cod',
+        'shipping_name' => 'Rahim Uddin',
+        'shipping_phone' => '01712345678',
+        'shipping_address' => 'House 12, Road 5, Dhanmondi',
+        'shipping_district' => 'Dhaka',
+        'note' => null,
+    ], $overrides);
+}
+
+/** Fills the cart, optionally applies a coupon, and returns the hash that checkout needs. */
+function readyCart(User $user, array $pairs, ?string $coupon = null): string
+{
+    $carts = app(CartService::class);
+
+    foreach ($pairs as [$variant, $quantity]) {
+        $carts->addItem($user, $variant->id, $quantity);
+    }
+
+    if ($coupon !== null) {
+        $carts->applyCoupon($user, $coupon);
+    }
+
+    return $carts->prepare($user)['cart_hash'];
+}
+
+function placeOrder(User $user, string $hash, array $overrides = [], ?string $key = null): Order
+{
+    return app(OrderService::class)->checkout(
+        $user,
+        checkoutInput(['cart_hash' => $hash] + $overrides),
+        $key ?? 'key-'.Str::random(12)
+    );
 }

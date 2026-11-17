@@ -488,4 +488,23 @@ class CartService
             throw CartException::quantityTooHigh(self::maxQuantity());
         }
     }
+
+    /** Locks the cart row. Call it inside a transaction. */
+    public function lock(User $user): Cart
+    {
+        return $this->lockedCart($user);
+    }
+
+    /** @return array<string, mixed> */
+    public function describe(Cart $cart, User $user): array
+    {
+        return $this->build($cart, $user);
+    }
+
+    /** Empties the cart after an order was placed. The delivery choice stays. */
+    public function emptyAfterOrder(Cart $cart): void
+    {
+        CartItem::where('cart_id', $cart->id)->delete();
+        $cart->update(['coupon_code' => null]);
+    }
 }

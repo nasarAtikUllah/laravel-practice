@@ -67,6 +67,7 @@ class Coupon extends Model
         return Attribute::make(set: fn (string $value) => strtoupper(trim($value)));
     }
 
+    /** @return HasMany<CouponRedemption, $this> */
     public function redemptions(): HasMany
     {
         return $this->hasMany(CouponRedemption::class);
