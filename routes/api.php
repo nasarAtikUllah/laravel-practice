@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AdminOrderController;
+use App\Http\Controllers\Api\V1\AdminPaymentController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BrandController;
 use App\Http\Controllers\Api\V1\CartController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\Api\V1\StockController;
 use App\Http\Controllers\Api\V1\StockMovementController;
 use App\Http\Controllers\Api\V1\VariantImageController;
 use App\Models\Order;
+use App\Models\Payment;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('frontend')->middleware('throttle:public-api')->group(function () {
@@ -131,5 +133,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{number}/ship', [AdminOrderController::class, 'ship'])->where('number', Order::NUMBER_PATTERN);
         Route::post('/{number}/deliver', [AdminOrderController::class, 'deliver'])->where('number', Order::NUMBER_PATTERN);
         Route::post('/{number}/cancel', [AdminOrderController::class, 'cancel'])->where('number', Order::NUMBER_PATTERN);
+    });
+
+    Route::middleware(['can:manage-orders', 'throttle:orders-admin'])->prefix('admin/payments')->group(function () {
+        Route::get('/', [AdminPaymentController::class, 'index']);
+        Route::get('/{reference}', [AdminPaymentController::class, 'show'])->where('reference', Payment::REFERENCE_PATTERN);
     });
 });
