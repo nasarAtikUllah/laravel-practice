@@ -137,4 +137,10 @@ class Order extends Model
     {
         return $this->belongsTo(User::class, 'cancelled_by');
     }
+
+    /** @return HasMany<Payment, $this> */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class)->orderBy('id');
+    }
 }

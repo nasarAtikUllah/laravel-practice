@@ -5,6 +5,7 @@ use App\Models\Collection;
 use App\Models\Coupon;
 use App\Models\CouponRedemption;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\ShippingOption;
@@ -12,7 +13,10 @@ use App\Models\User;
 use App\Services\CartService;
 use App\Services\OrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Factory as HttpClientFactory;
+use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -216,4 +220,34 @@ function placeOrder(User $user, string $hash, array $overrides = [], ?string $ke
         checkoutInput(['cart_hash' => $hash] + $overrides),
         $key ?? 'key-'.Str::random(12)
     );
+}
+
+/** An online order: the stock and the coupon use are held, and it waits for payment. @return array{0: Order, 1: ProductVariant} */
+function onlineOrderFor(User $user, int $quantity = 2, ?string $coupon = null, float $price = 1000): array
+{
+    $variant = buyable($price, ['stock' => 10]);
+    $order = placeOrder($user, readyCart($user, [[$variant, $quantity]], $coupon), ['payment_method' => 'online']);
+
+    return [$order, $variant];
+}
+
+/** Replaces the HTTP client with a fake that has only these answers. Any other request fails the test. */
+function sslFake(array|Closure $stubs): void
+{
+    Http::swap(new HttpClientFactory);
+    Http::fake($stubs);
+    Http::preventStrayRequests();
+}
+
+/** SSLCommerz starts every payment session. */
+function fakeSslcommerzSession(string $sessionKey = 'SESSION-KEY-1'): void
+{
+    sslFake([
+        '*/gwprocess/v4/api.php' => Http::response([
+            'status' => 'SUCCESS',
+            'failedreason' => '',
+            'sessionkey' => $sessionKey,
+            'GatewayPageURL' => 'https://sandbox.sslcommerz.com/EasyCheckOut/'.$sessionKey,
+        ]),
+    ]);
 }

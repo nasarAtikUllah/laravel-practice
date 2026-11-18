@@ -38,5 +38,15 @@
         <env name="DELIVERY_FEE" value="0"/>
         <env name="CART_MAX_QUANTITY" value="20"/>
         <env name="CART_MAX_LINES" value="30"/>
+
+        <env name="PAYMENT_GATEWAY" value="sslcommerz"/>
+        <env name="PAYMENT_MAX_ATTEMPTS" value="3"/>
+        <env name="PAYMENT_MIN_AMOUNT" value="10"/>
+        <env name="PAYMENT_MAX_AMOUNT" value="500000"/>
+        <env name="SSLCOMMERZ_STORE_ID" value="teststore"/>
+        <env name="SSLCOMMERZ_STORE_PASSWORD" value="teststore@ssl"/>
+        <env name="SSLCOMMERZ_SANDBOX" value="true"/>
+        <env name="SSLCOMMERZ_CALLBACK_BASE" value="https://shop.test"/>
+        <env name="SSLCOMMERZ_TIMEOUT" value="15"/>
     </php>
 </phpunit>
