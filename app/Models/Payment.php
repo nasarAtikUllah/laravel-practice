@@ -32,6 +32,8 @@ class Payment extends Model
 {
     use HasFactory;
 
+    public const REFERENCE_PATTERN = 'P[0-9]+-[A-Z0-9]{10}';
+
     protected $fillable = [
         'order_id',
         'provider',
@@ -74,5 +76,12 @@ class Payment extends Model
     public function events(): HasMany
     {
         return $this->hasMany(PaymentEvent::class);
+    }
+
+    /** The customer can still pay with this attempt. */
+    public function isOpen(): bool
+    {
+        return $this->status === PaymentRecordStatus::Initiated
+            && ($this->expires_at === null || $this->expires_at->gt(now()));
     }
 }

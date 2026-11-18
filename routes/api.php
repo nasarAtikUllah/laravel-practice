@@ -16,6 +16,8 @@ use App\Http\Controllers\Api\V1\Frontend\ProductController as FrontendProductCon
 use App\Http\Controllers\Api\V1\Frontend\ShippingOptionController as FrontendShippingOptionController;
 use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\OrderController;
+use App\Http\Controllers\Api\V1\PaymentCallbackController;
+use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\ProductImageController;
 use App\Http\Controllers\Api\V1\ProductVariantController;
@@ -47,6 +49,13 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,
 
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink'])->middleware('throttle:5,1');
 Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword'])->middleware('throttle:5,1');
+
+Route::prefix('payments/sslcommerz')->middleware('throttle:payment-callbacks')->group(function () {
+    Route::post('/ipn', [PaymentCallbackController::class, 'ipn']);
+    Route::match(['get', 'post'], '/success', [PaymentCallbackController::class, 'paymentSuccess']);
+    Route::match(['get', 'post'], '/fail', [PaymentCallbackController::class, 'paymentFail']);
+    Route::match(['get', 'post'], '/cancel', [PaymentCallbackController::class, 'paymentCancel']);
+});
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/profile', [AuthController::class, 'profile']);
@@ -110,6 +119,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', [OrderController::class, 'store'])->middleware('throttle:checkout');
         Route::get('/{number}', [OrderController::class, 'show'])->where('number', Order::NUMBER_PATTERN);
         Route::post('/{number}/cancel', [OrderController::class, 'cancel'])->where('number', Order::NUMBER_PATTERN);
+
+        Route::post('/{number}/pay', [PaymentController::class, 'pay'])->where('number', Order::NUMBER_PATTERN)->middleware('throttle:payments');
+        Route::get('/{number}/payments', [PaymentController::class, 'index'])->where('number', Order::NUMBER_PATTERN);
     });
 
     Route::middleware(['can:manage-orders', 'throttle:orders-admin'])->prefix('admin/orders')->group(function () {

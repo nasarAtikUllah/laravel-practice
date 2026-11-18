@@ -50,6 +50,7 @@ class PaymentGatewayManager
             rtrim((string) ($config['callback_base'] ?? ''), '/'),
             max(1, (int) ($config['timeout'] ?? 15)),
             (string) ($config['postcode'] ?? '1000'),
+            (bool) ($config['verify_signature'] ?? true),
         );
     }
 }

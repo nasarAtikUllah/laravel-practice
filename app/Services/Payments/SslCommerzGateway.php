@@ -22,6 +22,7 @@ class SslCommerzGateway implements PaymentGateway
         private readonly string $callbackBase,
         private readonly int $timeout,
         private readonly string $postcode,
+        private readonly bool $verifySignature = true,
     ) {}
 
     public function name(): string
@@ -91,10 +92,11 @@ class SslCommerzGateway implements PaymentGateway
 
         // A message that carries a signature must carry a correct one.
         // The server-to-server call (IPN) must always be signed. The customer coming back may not be.
-        if (($requireSignature || $request->filled('verify_sign')) && ! $this->hasValidSignature($request)) {
+        if ($this->verifySignature
+            && ($requireSignature || $request->filled('verify_sign'))
+            && ! $this->hasValidSignature($request)) {
             throw InvalidWebhookException::signature();
         }
-
         // The message only tells us which payment to look at. The answer comes from the provider.
         $validationId = $this->text($request->input('val_id'), 100);
 

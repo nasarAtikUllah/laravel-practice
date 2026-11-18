@@ -82,6 +82,20 @@ class OrderService
 
         $method = PaymentMethod::from((string) $input['payment_method']);
         $grandCents = Money::cents($data['grand_total']);
+
+        // An online payment outside the limits of the provider would fail later. Say so now.
+        if ($method === PaymentMethod::Online && $grandCents > 0) {
+            [$min, $max] = PaymentService::limits();
+
+            if ($grandCents < $min) {
+                throw OrderException::onlineAmount('Online payment is available for orders of '.Money::format($min).' or more.');
+            }
+
+            if ($max > 0 && $grandCents > $max) {
+                throw OrderException::onlineAmount('Online payment is available for orders up to '.Money::format($max).'.');
+            }
+        }
+
         $minutes = InventoryService::reservationMinutes();
 
         // Cash on delivery, and an order with nothing to pay online, take the stock at once.

@@ -99,8 +99,7 @@ class PaymentService
         }
 
         $cents = Money::cents($order->grand_total);
-        $min = Money::cents(config('payments.min_amount', 10));
-        $max = Money::cents(config('payments.max_amount', 500000));
+        [$min, $max] = self::limits();
 
         if ($cents < $min) {
             throw PaymentException::amountTooSmall(Money::format($min));
@@ -216,8 +215,10 @@ class PaymentService
             }
 
             // The money does not match the order. It is never used to confirm it.
-            if (Money::cents($event->amount) !== Money::cents($payment->amount)
-                || strtoupper($event->currency) !== strtoupper($payment->currency)) {
+            if (
+                Money::cents($event->amount) !== Money::cents($payment->amount)
+                || strtoupper($event->currency) !== strtoupper($payment->currency)
+            ) {
                 $payment->update([
                     'status' => PaymentRecordStatus::Failed,
                     'failure_reason' => 'The amount paid did not match the order.',
@@ -395,5 +396,14 @@ class PaymentService
     {
         return Payment::query()->where('reference', $reference)->lockForUpdate()->first()
             ?? throw PaymentException::notFound();
+    }
+
+    /** @return array{0: int, 1: int} the smallest and the largest online payment, in paisa */
+    public static function limits(): array
+    {
+        return [
+            Money::cents(config('payments.min_amount', 10)),
+            Money::cents(config('payments.max_amount', 500000)),
+        ];
     }
 }
