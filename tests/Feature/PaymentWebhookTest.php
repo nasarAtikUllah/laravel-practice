@@ -8,11 +8,11 @@ use App\Models\InventoryMovement;
 use App\Models\Payment;
 use App\Models\PaymentEvent;
 use App\Models\User;
-use App\Services\PaymentService;
 use App\Services\Payments\GatewayException;
 use App\Services\Payments\InvalidWebhookException;
 use App\Services\Payments\PaymentGatewayManager;
 use App\Services\Payments\SslCommerzGateway;
+use App\Services\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Http\Request;
@@ -188,7 +188,7 @@ it('handles a message again when the first try stopped before it finished', func
 it('refuses an unsigned IPN even when SSLCommerz would confirm the payment', function () {
     hookAnswers($this->payment);
 
-    expect(fn () => hookHandle($this->payment, signed: false) )->not->toThrow(InvalidWebhookException::class);
+    expect(fn () => hookHandle($this->payment, signed: false))->not->toThrow(InvalidWebhookException::class);
 });
 
 it('refuses an unsigned IPN and leaves the order alone', function () {

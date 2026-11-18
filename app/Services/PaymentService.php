@@ -15,15 +15,15 @@ use App\Models\InventoryReservation;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
 use App\Models\Payment;
+use App\Models\PaymentEvent;
 use App\Services\Payments\PaymentGatewayManager;
 use App\Services\Payments\WebhookEvent;
 use App\Support\Money;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
-use App\Models\PaymentEvent;
-use Illuminate\Database\UniqueConstraintViolationException;
-use Illuminate\Http\Request;
 
 class PaymentService
 {
@@ -135,7 +135,7 @@ class PaymentService
         return $payment->refresh();
     }
 
-        // ---------- A message from the provider ----------
+    // ---------- A message from the provider ----------
 
     /**
      * Handles one message from the provider: its server call (IPN) or the customer coming back.
@@ -304,7 +304,7 @@ class PaymentService
         $payment->update([
             'status' => PaymentRecordStatus::Succeeded,
             'paid_at' => now(),
-            'failure_reason' => null, 
+            'failure_reason' => null,
             // A risky payment still confirms the order, but staff can find it.
             'review_reason' => $event->riskLevel === 1 ? 'risky_payment' : null,
         ] + $this->details($event));
