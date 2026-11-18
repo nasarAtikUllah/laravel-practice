@@ -387,8 +387,8 @@ it('writes a note for a payment that SSLCommerz marked as risky, and still confi
     $payment = paymentService()->initiate($order);
 
     expect(succeed($payment, ['riskLevel' => 1, 'riskTitle' => 'Risky']))->toBe('confirmed');
-
     expect($payment->fresh()->risk_level)->toBe(1);
+    expect($payment->fresh()->review_reason)->toBe('risky_payment');
     expect($order->fresh()->status)->toBe(OrderStatus::Confirmed);
     expect(lastHistory($order)->note)
         ->toBe('Payment received. The payment provider marked it as risky. Check it before shipping.');

@@ -21,6 +21,9 @@ use App\Support\Money;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
+use App\Models\PaymentEvent;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Http\Request;
 
 class PaymentService
 {
@@ -132,6 +135,70 @@ class PaymentService
         return $payment->refresh();
     }
 
+        // ---------- A message from the provider ----------
+
+    /**
+     * Handles one message from the provider: its server call (IPN) or the customer coming back.
+     * The provider is asked what really happened, and the same fact is handled once, whichever
+     * path brings it and however often it comes.
+     *
+     * @return array{0: Payment, 1: string} the payment as it is now, and a short code for what happened
+     */
+    public function handleWebhook(string $provider, Request $request, bool $requireSignature = true): array
+    {
+        // Look the payment up first, so an unknown id never makes us call the provider.
+        $reference = $request->input('tran_id');
+
+        $payment = is_string($reference) && $reference !== ''
+            ? Payment::query()->where('provider', $provider)->where('reference', $reference)->first()
+            : null;
+
+        if ($payment === null) {
+            throw PaymentException::notFound();
+        }
+
+        $event = $this->gateways->driver($provider)->parseWebhook($request, $requireSignature);
+
+        $record = $this->recordEvent($payment, $provider, $event);
+
+        if ($record === null) {
+            return [$payment->refresh(), 'duplicate_event'];
+        }
+
+        $result = match ($event->type) {
+            WebhookEvent::SUCCEEDED => $this->applySucceeded($event),
+            WebhookEvent::FAILED => $this->applyFailed($event->reference, $event->reason),
+            WebhookEvent::CANCELLED => $this->applyFailed($event->reference, $event->reason, PaymentRecordStatus::Cancelled),
+            WebhookEvent::EXPIRED => $this->applyFailed($event->reference, $event->reason, PaymentRecordStatus::Expired),
+            default => 'ignored',
+        };
+
+        $record->update(['result' => $result]);
+
+        return [$payment->refresh(), $result];
+    }
+
+    /** @return PaymentEvent|null null when this fact was already handled */
+    private function recordEvent(Payment $payment, string $provider, WebhookEvent $event): ?PaymentEvent
+    {
+        try {
+            return PaymentEvent::create([
+                'payment_id' => $payment->id,
+                'provider' => $provider,
+                'event_id' => $event->eventId,
+                'type' => $event->type,
+                'payload' => $event->payload,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            $existing = PaymentEvent::query()
+                ->where('provider', $provider)
+                ->where('event_id', $event->eventId)
+                ->firstOrFail();
+
+            // A first try that stopped before it finished is tried again.
+            return $existing->result === null ? $existing : null;
+        }
+    }
     // ---------- What the provider tells us ----------
 
     /**
@@ -237,8 +304,9 @@ class PaymentService
         $payment->update([
             'status' => PaymentRecordStatus::Succeeded,
             'paid_at' => now(),
-            'failure_reason' => null,
-            'review_reason' => null,
+            'failure_reason' => null, 
+            // A risky payment still confirms the order, but staff can find it.
+            'review_reason' => $event->riskLevel === 1 ? 'risky_payment' : null,
         ] + $this->details($event));
 
         $order->update([
