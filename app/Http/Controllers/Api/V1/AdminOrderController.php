@@ -107,7 +107,7 @@ class AdminOrderController extends Controller
 
     private function detail(Order $order): Order
     {
-        return $order->load(['items', 'statusHistory.user:id,name', 'user:id,name,email', 'canceller:id,name']);
+        return $order->load(['items', 'statusHistory.user:id,name', 'user:id,name,email', 'canceller:id,name', 'payments']);
     }
 
     private function user(Request $request): User

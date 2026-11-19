@@ -65,5 +65,11 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('orders-admin', fn (Request $request) => Limit::perMinute(120)
             ->by('orders-admin:'.($request->user()->id ?? $request->ip())));
+
+        RateLimiter::for('payments', fn (Request $request) => Limit::perMinute(10)
+            ->by('payments:'.($request->user()->id ?? $request->ip())));
+
+        RateLimiter::for('payment-callbacks', fn (Request $request) => Limit::perMinute((int) config('payments.callback_requests_per_minute', 120))
+            ->by('payment-callbacks:'.$request->ip()));
     }
 }

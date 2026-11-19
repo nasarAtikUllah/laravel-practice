@@ -9,6 +9,7 @@ use App\Models\CouponRedemption;
 use App\Models\InventoryMovement;
 use App\Models\InventoryReservation;
 use App\Models\Order;
+use App\Models\ShippingOption;
 use App\Models\User;
 use App\Services\CartService;
 use App\Services\CouponService;
@@ -59,6 +60,18 @@ describe('when logged in', function () {
         $this->carts = app(CartService::class);
     });
 
+    it('tells the customer to choose cash on delivery when the order is too small for online payment', function () {
+        ShippingOption::query()->delete();
+        ShippingOption::factory()->asDefault()->create(['fee' => 0]);
+        $hash = readyCart($this->user, [[buyable(5, ['stock' => 10]), 1]]);
+
+        postOrder($this, $hash, ['payment_method' => 'online'])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Online payment is available for orders of 10.00 or more. Please choose cash on delivery.')
+            ->assertJsonPath('data', null);
+
+        expect(Order::count())->toBe(0);
+    });
     // ---------- Checkout ----------
 
     it('places a cash on delivery order', function () {

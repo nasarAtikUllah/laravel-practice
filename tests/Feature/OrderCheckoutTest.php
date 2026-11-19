@@ -597,3 +597,67 @@ it('saves nothing when the coupon fails after the stock was taken', function () 
     expect($variant->fresh()->stock)->toBe(10);
     expect(CartItem::count())->toBe(1);
 });
+
+// ---------- Limits of online payment ----------
+
+it('refuses an online order below the smallest online payment and saves nothing', function () {
+    ShippingOption::query()->delete();
+    ShippingOption::factory()->asDefault()->create(['fee' => 0]);
+    $variant = buyable(5, ['stock' => 10]);
+    $hash = readyCart($this->user, [[$variant, 1]]);
+
+    expect(fn () => placeOrder($this->user, $hash, ['payment_method' => 'online']))
+        ->toThrow(OrderException::class, 'Online payment is available for orders of 10.00 or more. Please choose cash on delivery.');
+
+    expect(Order::count())->toBe(0);
+    expect($variant->fresh()->stock)->toBe(10);
+    expect($variant->fresh()->reserved)->toBe(0);
+    expect(CartItem::count())->toBe(1);
+});
+
+it('allows the same small order as cash on delivery', function () {
+    ShippingOption::query()->delete();
+    ShippingOption::factory()->asDefault()->create(['fee' => 0]);
+
+    $order = placeOrder($this->user, readyCart($this->user, [[buyable(5, ['stock' => 10]), 1]]));
+
+    expect($order->status)->toBe(OrderStatus::PendingConfirmation);
+});
+
+it('refuses an online order above the largest online payment', function () {
+    ShippingOption::query()->delete();
+    ShippingOption::factory()->asDefault()->create(['fee' => 0]);
+    $hash = readyCart($this->user, [[buyable(500001, ['stock' => 10]), 1]]);
+
+    expect(fn () => placeOrder($this->user, $hash, ['payment_method' => 'online']))
+        ->toThrow(OrderException::class, 'Online payment is available for orders up to 500000.00. Please choose cash on delivery.');
+});
+
+it('accepts an online order exactly at the limits', function (float $price) {
+    ShippingOption::query()->delete();
+    ShippingOption::factory()->asDefault()->create(['fee' => 0]);
+
+    $order = placeOrder($this->user, readyCart($this->user, [[buyable($price, ['stock' => 10]), 1]]), ['payment_method' => 'online']);
+
+    expect($order->status)->toBe(OrderStatus::PendingPayment);
+})->with([10, 500000]);
+
+it('still takes an online order that has nothing to pay', function () {
+    ShippingOption::query()->delete();
+    ShippingOption::factory()->asDefault()->create(['fee' => 0]);
+    Coupon::factory()->percentage(100)->create(['code' => 'FREE100']);
+
+    $order = placeOrder($this->user, readyCart($this->user, [[buyable(5, ['stock' => 10]), 1]], 'FREE100'), ['payment_method' => 'online']);
+
+    expect($order->status)->toBe(OrderStatus::Confirmed);
+});
+
+it('reads the limits of online payment from the config', function () {
+    config(['payments.min_amount' => 100]);
+    ShippingOption::query()->delete();
+    ShippingOption::factory()->asDefault()->create(['fee' => 0]);
+    $hash = readyCart($this->user, [[buyable(99, ['stock' => 10]), 1]]);
+
+    expect(fn () => placeOrder($this->user, $hash, ['payment_method' => 'online']))
+        ->toThrow(OrderException::class, '100.00 or more');
+});

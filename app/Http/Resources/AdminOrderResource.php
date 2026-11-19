@@ -21,6 +21,13 @@ class AdminOrderResource extends OrderResource
             'customer' => $this->whenLoaded('user', fn () => $this->user->only(['id', 'name', 'email'])),
             'cancelled_by' => $this->whenLoaded('canceller', fn () => $this->canceller?->only(['id', 'name'])),
             'available_actions' => $this->availableActions(),
+            'payments' => $this->whenLoaded('payments', fn () => $this->payments->map(fn ($payment) => [
+                'reference' => $payment->reference,
+                'status' => $payment->status->value,
+                'amount' => $payment->amount,
+                'review_reason' => $payment->review_reason,
+                'paid_at' => $payment->paid_at,
+            ])->all()),
             // The staff view of the history shows who made each change.
             'history' => $this->whenLoaded('statusHistory', fn () => $this->statusHistory->map(fn ($entry) => [
                 'from' => $entry->from_status?->value,
