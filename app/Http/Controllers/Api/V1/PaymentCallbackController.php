@@ -82,12 +82,15 @@ class PaymentCallbackController extends Controller
 
     private function returnUrl(?Payment $payment): string
     {
+        $orderUrl = config('payments.frontend_order_url');
+        $base = $payment?->order !== null && is_string($orderUrl) && trim($orderUrl) !== ''
+            ? rtrim($orderUrl, '/').'/'.rawurlencode($payment->order->number)
+            : (string) config('payments.return_url');
+
         $query = array_filter([
             'order' => $payment?->order->number,
             'result' => $this->result($payment),
         ]);
-
-        $base = (string) config('payments.return_url');
 
         return $base.(str_contains($base, '?') ? '&' : '?').http_build_query($query);
     }

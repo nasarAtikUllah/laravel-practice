@@ -27,6 +27,11 @@ class AdminOrderResource extends OrderResource
                 'amount' => $payment->amount,
                 'review_reason' => $payment->review_reason,
                 'paid_at' => $payment->paid_at,
+                'refunds' => $payment->refunds->map(fn ($refund) => [
+                    'reference' => $refund->reference,
+                    'amount' => $refund->amount,
+                    'status' => $refund->status->value,
+                ])->all(),
             ])->all()),
             // The staff view of the history shows who made each change.
             'history' => $this->whenLoaded('statusHistory', fn () => $this->statusHistory->map(fn ($entry) => [

@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $session_key
  * @property string|null $validation_id
  * @property string $amount
+ * @property string|null $paid_amount
  * @property string $currency
  * @property PaymentRecordStatus $status
  * @property string|null $checkout_url
@@ -42,6 +43,7 @@ class Payment extends Model
         'session_key',
         'validation_id',
         'amount',
+        'paid_amount',
         'currency',
         'status',
         'checkout_url',
@@ -59,6 +61,7 @@ class Payment extends Model
         return [
             'status' => PaymentRecordStatus::class,
             'amount' => 'decimal:2',
+            'paid_amount' => 'decimal:2',
             'risk_level' => 'integer',
             'expires_at' => 'datetime',
             'paid_at' => 'datetime',
@@ -76,6 +79,12 @@ class Payment extends Model
     public function events(): HasMany
     {
         return $this->hasMany(PaymentEvent::class);
+    }
+
+    /** @return HasMany<Refund, $this> */
+    public function refunds(): HasMany
+    {
+        return $this->hasMany(Refund::class)->orderBy('id');
     }
 
     /** The customer can still pay with this attempt. */

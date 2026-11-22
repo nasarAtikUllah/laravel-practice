@@ -8,7 +8,7 @@ Route::get('/', function () {
 });
 Route::get('/shop', function () {
     return view('shop');
-});
+})->name('shop');
 
 Route::get('/my-orders/{number}', function ($number) {
     $order = Order::where('number', $number)->firstOrFail();

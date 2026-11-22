@@ -55,11 +55,6 @@ class OrderException extends DomainException
         return new self('Only a shipped order can be marked as delivered.', 409);
     }
 
-    public static function paidNeedsRefundByStaff(): self
-    {
-        return new self('This order has already been paid. It must be refunded before it can be cancelled.', 409);
-    }
-
     public static function onlineAmount(string $detail): self
     {
         return new self($detail.' Please choose cash on delivery.', 422);

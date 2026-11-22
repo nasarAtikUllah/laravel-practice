@@ -3,6 +3,7 @@
 namespace App\Services\Payments;
 
 use App\Models\Payment;
+use App\Models\Refund;
 use App\Support\Money;
 use Closure;
 use Illuminate\Http\Client\Response;
@@ -111,6 +112,46 @@ class SslCommerzGateway implements PaymentGateway
         $data = $this->lookup($payment->reference);
 
         return $data === null ? null : $this->event($payment->reference, $data);
+    }
+
+    public function refund(Payment $payment, Refund $refund): array
+    {
+        if (trim((string) $payment->provider_reference) === '') {
+            throw new GatewayException('The payment has no provider transaction reference.');
+        }
+
+        $response = $this->send(fn () => Http::timeout($this->timeout)->get($this->host().'/validator/api/merchantTransIDvalidationAPI.php', [
+            'bank_tran_id' => $payment->provider_reference,
+            'refund_trans_id' => $refund->reference,
+            'refund_amount' => Money::format(Money::cents($refund->amount)),
+            'refund_remarks' => $refund->reason,
+            'refe_id' => $refund->reference,
+            'store_id' => $this->storeId,
+            'store_passwd' => $this->storePassword,
+            'format' => 'json',
+        ]));
+
+        $data = $response->json();
+
+        if (! is_array($data) || ($data['APIConnect'] ?? null) !== 'DONE') {
+            throw new GatewayException('SSLCommerz could not confirm the refund request.');
+        }
+
+        $status = strtolower(trim((string) ($data['status'] ?? '')));
+        $providerRefundId = $this->text($data['refund_ref_id'] ?? null, 100)
+            ?? $this->text($data['refund_trans_id'] ?? null, 100);
+
+        return [
+            'status' => match ($status) {
+                'success' => 'succeeded',
+                'failed', 'failure' => 'failed',
+                default => 'processing',
+            },
+            'provider_refund_id' => $providerRefundId,
+            'failure_reason' => in_array($status, ['failed', 'failure'], true)
+                ? 'SSLCommerz rejected the refund request.'
+                : null,
+        ];
     }
 
     /**

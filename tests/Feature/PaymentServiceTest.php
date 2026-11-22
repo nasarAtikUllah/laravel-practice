@@ -545,7 +545,7 @@ it('cancels the order and flags the payment when the hold was released before th
     expect($history)->toHaveCount(3);
     expect($history[1]->to_status)->toBe(OrderStatus::Cancelled);
     expect($history[1]->user_id)->toBeNull();
-    expect($history[2]->note)->toBe('Payment received after the order was cancelled. Refund pending.');
+    expect($history[2]->note)->toBe('Payment received after the order was cancelled. Refund requires staff approval.');
 });
 
 it('sells nothing when only the coupon use was given back', function () {
@@ -608,7 +608,7 @@ it('flags a payment that arrives after the customer cancelled', function () {
     expect($variant->fresh()->reserved)->toBe(0);
     expect(InventoryMovement::count())->toBe(0);
     expect(lastHistory($order)->note)
-        ->toBe('Payment received after the order was cancelled. Refund pending.');
+        ->toBe('Payment received after the order was cancelled. Refund requires staff approval.');
 
 });
 
@@ -633,7 +633,7 @@ it('flags a second payment for an order that is already paid', function () {
     expect(InventoryMovement::count())->toBe(1);
 
     expect(lastHistory($order)->note)
-        ->toBe('A second payment was received for this order. Refund pending.');
+        ->toBe('A second payment was received for this order. Refund requires staff approval.');
     expect($first->fresh()->review_reason)->toBeNull();
 });
 

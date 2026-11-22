@@ -4,8 +4,14 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\PaymentRecordStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\AdminRefundRequest;
 use App\Http\Resources\AdminPaymentResource;
+use App\Http\Resources\AdminRefundResource;
 use App\Models\Payment;
+use App\Models\Refund;
+use App\Models\User;
+use App\Services\RefundService;
+use App\Support\Money;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -60,9 +66,46 @@ class AdminPaymentController extends Controller
     {
         $payment = Payment::query()
             ->where('reference', $reference)
-            ->with(['order.user:id,name,email', 'events' => fn ($q) => $q->orderBy('id')])
+            ->with(['order.user:id,name,email', 'events' => fn ($q) => $q->orderBy('id'), 'refunds'])
             ->firstOrFail();
 
         return $this->success(AdminPaymentResource::make($payment), 'Payment retrieved successfully.');
+    }
+
+    public function refund(AdminRefundRequest $request, string $reference, RefundService $refunds): JsonResponse
+    {
+        $payment = Payment::query()->where('reference', $reference)->firstOrFail();
+
+        $refund = $refunds->request(
+            $payment,
+            Money::cents($request->validated('amount')),
+            $request->validated('reason'),
+            $this->user($request),
+            $request->validated('idempotency_key'),
+        );
+
+        return $this->success(
+            AdminRefundResource::make($refund->load(['payment', 'order'])),
+            $refund->wasRecentlyCreated ? 'Refund requested successfully.' : 'Refund request already exists.',
+            $refund->wasRecentlyCreated ? 201 : 200,
+        );
+    }
+
+    public function retryRefund(Refund $refund, RefundService $refunds): JsonResponse
+    {
+        $refund = $refunds->retry($refund);
+
+        return $this->success(
+            AdminRefundResource::make($refund->load(['payment', 'order'])),
+            'Refund retry requested successfully.',
+        );
+    }
+
+    private function user(Request $request): User
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        return $user;
     }
 }

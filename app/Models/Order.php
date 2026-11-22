@@ -143,4 +143,10 @@ class Order extends Model
     {
         return $this->hasMany(Payment::class)->orderBy('id');
     }
+
+    /** @return HasMany<Refund, $this> */
+    public function refunds(): HasMany
+    {
+        return $this->hasMany(Refund::class)->orderBy('id');
+    }
 }

@@ -50,6 +50,7 @@
         <env name="SSLCOMMERZ_TIMEOUT" value="15"/>
 
         <env name="PAYMENT_RETURN_URL" value="https://shop.test/payment/result"/>
+        <env name="PAYMENT_FRONTEND_ORDER_URL" value="https://shop.test/my-orders"/>
         <env name="PAYMENT_CALLBACK_LIMIT" value="120"/>
         <env name="PAYMENT_CALLBACK_PER_REFERENCE" value="10"/>
         <env name="SSLCOMMERZ_VERIFY_SIGNATURE" value="true"/>

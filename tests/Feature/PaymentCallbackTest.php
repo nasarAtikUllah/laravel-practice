@@ -105,6 +105,10 @@ function cbProviderKnowsNothing(): void
 
 function cbReturn(?Order $order, string $result, string $base = 'https://shop.test/payment/result'): string
 {
+    if ($order !== null) {
+        $base = rtrim((string) config('payments.frontend_order_url'), '/').'/'.rawurlencode($order->number);
+    }
+
     $query = array_filter(['order' => $order?->number, 'result' => $result]);
 
     return $base.(str_contains($base, '?') ? '&' : '?').http_build_query($query);
@@ -588,12 +592,26 @@ it('sends the customer back with pending when too many checks were made', functi
 
 it('takes the address of the shop from the config', function () {
     config(['payments.return_url' => 'https://app.test/paid?lang=bn']);
+    config(['payments.frontend_order_url' => 'https://app.test/orders']);
     [$order] = onlineOrderFor($this->user);
     $payment = cbStart($order);
     cbProvider($payment);
 
     cbBrowser($this, 'success', $payment)
-        ->assertRedirect('https://app.test/paid?lang=bn&order='.$order->number.'&result=success');
+        ->assertRedirect('https://app.test/orders/'.$order->number.'?order='.$order->number.'&result=success');
+});
+
+it('returns a successful payment to the configured customer order page', function () {
+    [$order] = onlineOrderFor($this->user);
+    $payment = cbStart($order);
+    cbProvider($payment);
+
+    cbBrowser($this, 'success', $payment)
+        ->assertRedirect(cbReturn($order, 'success'));
+
+    $this->get("/my-orders/{$order->number}")
+        ->assertOk()
+        ->assertSee($order->number);
 });
 
 it('shows no payment details in the redirect', function () {

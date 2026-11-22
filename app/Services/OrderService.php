@@ -6,6 +6,7 @@ use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentRecordStatus;
 use App\Enums\PaymentStatus;
+use App\Enums\RefundStatus;
 use App\Enums\ReservationStatus;
 use App\Exceptions\InsufficientStockException;
 use App\Exceptions\OrderException;
@@ -29,6 +30,7 @@ class OrderService
         private readonly CartService $carts,
         private readonly InventoryService $inventory,
         private readonly CouponService $coupons,
+        private readonly RefundService $refunds,
     ) {}
 
     /**
@@ -211,18 +213,22 @@ class OrderService
      * Cancels an order and gives back what it took: the stock and the coupon use.
      * The order row is locked, so a cancel and any other change to the order cannot overlap.
      */
-    public function cancel(Order $order, ?User $by, ?string $reason = null, bool $byStaff = false): Order
-    {
-        return DB::transaction(function () use ($order, $by, $reason, $byStaff) {
+    public function cancel(
+        Order $order,
+        ?User $by,
+        ?string $reason = null,
+        bool $byStaff = false,
+        bool $includeDeliveryFee = false,
+    ): Order {
+        return DB::transaction(function () use ($order, $by, $reason, $byStaff, $includeDeliveryFee) {
             $locked = Order::lockForUpdate()->findOrFail($order->id);
 
             if (! $locked->status->canMoveTo(OrderStatus::Cancelled)) {
                 throw OrderException::cannotCancel();
             }
 
-            // A paid order needs a refund first (Day 4).
-            if ($locked->payment_status === PaymentStatus::Paid) {
-                throw $byStaff ? OrderException::paidNeedsRefundByStaff() : OrderException::paidNeedsRefund();
+            if ($locked->payment_status === PaymentStatus::Paid && ! $byStaff) {
+                throw OrderException::paidNeedsRefund();
             }
 
             $reason = trim((string) $reason) !== ''
@@ -274,8 +280,68 @@ class OrderService
                 'note' => $reason,
             ]);
 
+            if ($byStaff && $locked->payment_status === PaymentStatus::Paid) {
+                $this->requestCancellationRefunds($locked, $by, $reason, $includeDeliveryFee);
+            }
+
             return $locked;
         });
+    }
+
+    private function requestCancellationRefunds(Order $order, User $by, string $reason, bool $includeDeliveryFee): void
+    {
+        $payments = Payment::query()
+            ->where('order_id', $order->id)
+            ->where('status', PaymentRecordStatus::Succeeded->value)
+            ->where(fn ($query) => $query->whereNull('review_reason')->orWhere('review_reason', 'risky_payment'))
+            ->whereNotNull('paid_amount')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        $availableByPayment = [];
+        $capturedCents = 0;
+        $reservedCents = 0;
+
+        foreach ($payments as $payment) {
+            $paidCents = Money::cents($payment->paid_amount);
+            $refundedCents = Money::cents($payment->refunds()
+                ->where('status', '!=', RefundStatus::Failed->value)
+                ->sum('amount'));
+            $availableByPayment[$payment->id] = max(0, $paidCents - $refundedCents);
+            $capturedCents += $paidCents;
+            $reservedCents += $refundedCents;
+        }
+
+        $deliveryToRetain = $includeDeliveryFee
+            ? 0
+            : min($capturedCents, Money::cents($order->delivery_fee));
+        $targetCents = max(0, $capturedCents - $deliveryToRetain);
+        $remainingCents = max(0, $targetCents - $reservedCents);
+        $requested = false;
+
+        foreach ($payments as $payment) {
+            $amountCents = min($remainingCents, $availableByPayment[$payment->id]);
+
+            if ($amountCents < 1) {
+                continue;
+            }
+
+            $this->refunds->request(
+                $payment,
+                $amountCents,
+                $reason,
+                $by,
+                "order-cancel-{$order->id}-payment-{$payment->id}",
+            );
+
+            $remainingCents -= $amountCents;
+            $requested = true;
+        }
+
+        if ($requested) {
+            $order->update(['payment_status' => PaymentStatus::RefundPending]);
+        }
     }
 
     // ---------- Staff: confirm, ship, deliver ----------

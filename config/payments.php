@@ -2,7 +2,8 @@
 
 return [
     'default' => env('PAYMENT_GATEWAY', 'sslcommerz'),
-    'return_url' => env('PAYMENT_RETURN_URL', rtrim((string) env('APP_URL'), '/').'/payment/result'),
+    'return_url' => env('PAYMENT_RETURN_URL', rtrim((string) env('APP_URL'), '/').'/shop'),
+    'frontend_order_url' => env('PAYMENT_FRONTEND_ORDER_URL'),
     'callback_requests_per_minute' => (int) env('PAYMENT_CALLBACK_LIMIT', 120),
     'callback_attempts_per_reference' => (int) env('PAYMENT_CALLBACK_PER_REFERENCE', 10),
 

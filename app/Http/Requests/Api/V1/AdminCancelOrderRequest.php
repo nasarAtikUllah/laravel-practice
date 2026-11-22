@@ -24,6 +24,7 @@ class AdminCancelOrderRequest extends FormRequest
     {
         return [
             'reason' => ['required', 'string', 'min:3', 'max:255'],
+            'include_delivery_fee' => ['sometimes', 'boolean'],
         ];
     }
 }

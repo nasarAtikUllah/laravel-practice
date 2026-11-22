@@ -25,6 +25,7 @@ class PaymentFactory extends Factory
             'provider_reference' => null,
             'session_key' => 'SESSION-'.strtoupper(Str::random(12)),
             'amount' => 1060,
+            'paid_amount' => null,
             'currency' => 'BDT',
             'status' => PaymentRecordStatus::Initiated,
             'checkout_url' => 'https://sandbox.sslcommerz.com/EasyCheckOut/'.Str::random(12),
@@ -34,7 +35,12 @@ class PaymentFactory extends Factory
 
     public function succeeded(): static
     {
-        return $this->state(['status' => PaymentRecordStatus::Succeeded, 'paid_at' => now()]);
+        return $this->state([
+            'status' => PaymentRecordStatus::Succeeded,
+            'paid_amount' => 1060,
+            'provider_reference' => 'BANK-'.strtoupper(Str::random(10)),
+            'paid_at' => now(),
+        ]);
     }
 
     public function failed(): static

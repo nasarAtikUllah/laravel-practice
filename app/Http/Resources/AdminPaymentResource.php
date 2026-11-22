@@ -19,6 +19,7 @@ class AdminPaymentResource extends JsonResource
             'validation_id' => $this->validation_id,
             'status' => $this->status->value,
             'amount' => $this->amount,
+            'paid_amount' => $this->paid_amount,
             'currency' => $this->currency,
             'card_type' => $this->card_type,
             'risk_level' => $this->risk_level,
@@ -43,6 +44,16 @@ class AdminPaymentResource extends JsonResource
                 'type' => $event->type,
                 'result' => $event->result,
                 'at' => $event->created_at,
+            ])->all()),
+            'refunds' => $this->whenLoaded('refunds', fn () => $this->refunds->map(fn ($refund) => [
+                'id' => $refund->id,
+                'reference' => $refund->reference,
+                'amount' => $refund->amount,
+                'status' => $refund->status->value,
+                'reason' => $refund->reason,
+                'failure_reason' => $refund->failure_reason,
+                'attempts' => $refund->attempts,
+                'created_at' => $refund->created_at,
             ])->all()),
         ];
     }

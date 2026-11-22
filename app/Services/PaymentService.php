@@ -207,8 +207,15 @@ class PaymentService
     public function applySucceeded(WebhookEvent $event): string
     {
         return DB::transaction(function () use ($event) {
-            $payment = $this->lockPayment($event->reference);
-            $order = Order::lockForUpdate()->findOrFail($payment->order_id);
+            $paymentId = Payment::query()->where('reference', $event->reference)->value('id');
+
+            if ($paymentId === null) {
+                throw PaymentException::notFound();
+            }
+
+            $orderId = Payment::query()->whereKey($paymentId)->value('order_id');
+            $order = Order::query()->lockForUpdate()->findOrFail($orderId);
+            $payment = Payment::query()->lockForUpdate()->findOrFail($paymentId);
 
             if ($payment->status === PaymentRecordStatus::Succeeded) {
                 return 'already_succeeded';
@@ -328,7 +335,7 @@ class PaymentService
         ]);
     }
 
-    /** Money arrived that cannot confirm the order. It is recorded and flagged for a refund. */
+    /** Money arrived that cannot confirm the order. It is recorded for staff review. */
     private function acceptWithoutOrder(Payment $payment, Order $order, WebhookEvent $event, string $reviewReason): string
     {
         if ($order->status === OrderStatus::PendingPayment) {
@@ -344,7 +351,7 @@ class PaymentService
             'review_reason' => $reviewReason,
         ] + $this->details($event));
 
-        // The money is with us, so the order shows it. A refund is made later (Day 4).
+        // The money is recorded on the order; staff must approve any refund separately.
         if ($order->payment_status === PaymentStatus::Unpaid) {
             $order->update(['payment_status' => PaymentStatus::Paid]);
         }
@@ -355,8 +362,8 @@ class PaymentService
             'to_status' => $order->status,
             'user_id' => null,
             'note' => $reviewReason === 'duplicate_payment'
-                ? 'A second payment was received for this order. Refund pending.'
-                : 'Payment received after the order was cancelled. Refund pending.',
+                ? 'A second payment was received for this order. Refund requires staff approval.'
+                : 'Payment received after the order was cancelled. Refund requires staff approval.',
         ]);
 
         return $reviewReason;
@@ -385,6 +392,7 @@ class PaymentService
     private function details(WebhookEvent $event): array
     {
         return array_filter([
+            'paid_amount' => Money::format(Money::cents($event->amount)),
             'provider_reference' => $event->providerReference,
             'validation_id' => $event->validationId,
             'card_type' => $event->cardType,

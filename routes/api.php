@@ -139,4 +139,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [AdminPaymentController::class, 'index']);
         Route::get('/{reference}', [AdminPaymentController::class, 'show'])->where('reference', Payment::REFERENCE_PATTERN);
     });
+
+    Route::middleware(['can:manage-refunds', 'throttle:orders-admin'])->group(function () {
+        Route::post('/admin/payments/{reference}/refunds', [AdminPaymentController::class, 'refund'])
+            ->where('reference', Payment::REFERENCE_PATTERN);
+        Route::post('/admin/refunds/{refund}/retry', [AdminPaymentController::class, 'retryRefund'])
+            ->whereNumber('refund');
+    });
 });
