@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AdminOrderController;
+use App\Http\Controllers\Api\V1\AdminPaymentController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BrandController;
 use App\Http\Controllers\Api\V1\CartController;
@@ -16,6 +17,8 @@ use App\Http\Controllers\Api\V1\Frontend\ProductController as FrontendProductCon
 use App\Http\Controllers\Api\V1\Frontend\ShippingOptionController as FrontendShippingOptionController;
 use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\OrderController;
+use App\Http\Controllers\Api\V1\PaymentCallbackController;
+use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\ProductImageController;
 use App\Http\Controllers\Api\V1\ProductVariantController;
@@ -24,6 +27,7 @@ use App\Http\Controllers\Api\V1\StockController;
 use App\Http\Controllers\Api\V1\StockMovementController;
 use App\Http\Controllers\Api\V1\VariantImageController;
 use App\Models\Order;
+use App\Models\Payment;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('frontend')->middleware('throttle:public-api')->group(function () {
@@ -47,6 +51,13 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,
 
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink'])->middleware('throttle:5,1');
 Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword'])->middleware('throttle:5,1');
+
+Route::prefix('payments/sslcommerz')->middleware('throttle:payment-callbacks')->group(function () {
+    Route::post('/ipn', [PaymentCallbackController::class, 'ipn']);
+    Route::match(['get', 'post'], '/success', [PaymentCallbackController::class, 'paymentSuccess']);
+    Route::match(['get', 'post'], '/fail', [PaymentCallbackController::class, 'paymentFail']);
+    Route::match(['get', 'post'], '/cancel', [PaymentCallbackController::class, 'paymentCancel']);
+});
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/profile', [AuthController::class, 'profile']);
@@ -110,6 +121,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', [OrderController::class, 'store'])->middleware('throttle:checkout');
         Route::get('/{number}', [OrderController::class, 'show'])->where('number', Order::NUMBER_PATTERN);
         Route::post('/{number}/cancel', [OrderController::class, 'cancel'])->where('number', Order::NUMBER_PATTERN);
+
+        Route::post('/{number}/pay', [PaymentController::class, 'pay'])->where('number', Order::NUMBER_PATTERN)->middleware('throttle:payments');
+        Route::get('/{number}/payments', [PaymentController::class, 'index'])->where('number', Order::NUMBER_PATTERN);
     });
 
     Route::middleware(['can:manage-orders', 'throttle:orders-admin'])->prefix('admin/orders')->group(function () {
@@ -119,5 +133,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{number}/ship', [AdminOrderController::class, 'ship'])->where('number', Order::NUMBER_PATTERN);
         Route::post('/{number}/deliver', [AdminOrderController::class, 'deliver'])->where('number', Order::NUMBER_PATTERN);
         Route::post('/{number}/cancel', [AdminOrderController::class, 'cancel'])->where('number', Order::NUMBER_PATTERN);
+    });
+
+    Route::middleware(['can:manage-orders', 'throttle:orders-admin'])->prefix('admin/payments')->group(function () {
+        Route::get('/', [AdminPaymentController::class, 'index']);
+        Route::get('/{reference}', [AdminPaymentController::class, 'show'])->where('reference', Payment::REFERENCE_PATTERN);
+    });
+
+    Route::middleware(['can:manage-refunds', 'throttle:orders-admin'])->group(function () {
+        Route::post('/admin/payments/{reference}/refunds', [AdminPaymentController::class, 'refund'])
+            ->where('reference', Payment::REFERENCE_PATTERN);
+        Route::post('/admin/refunds/{refund}/retry', [AdminPaymentController::class, 'retryRefund'])
+            ->whereNumber('refund');
     });
 });

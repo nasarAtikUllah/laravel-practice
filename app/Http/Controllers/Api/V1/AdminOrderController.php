@@ -90,11 +90,22 @@ class AdminOrderController extends Controller
 
     public function cancel(AdminCancelOrderRequest $request, string $number): JsonResponse
     {
+        $order = $this->find($number);
+
+        if (
+            $order->payment_status === PaymentStatus::Paid
+            && $order->status->canMoveTo(OrderStatus::Cancelled)
+            && ! $request->exists('include_delivery_fee')
+        ) {
+            $request->validate(['include_delivery_fee' => ['required', 'boolean']]);
+        }
+
         $order = $this->orders->cancel(
-            $this->find($number),
+            $order,
             $this->user($request),
             (string) $request->input('reason'),
             byStaff: true,
+            includeDeliveryFee: $request->boolean('include_delivery_fee'),
         );
 
         return $this->success(AdminOrderResource::make($this->detail($order)), 'Order cancelled successfully.');
@@ -107,7 +118,7 @@ class AdminOrderController extends Controller
 
     private function detail(Order $order): Order
     {
-        return $order->load(['items', 'statusHistory.user:id,name', 'user:id,name,email', 'canceller:id,name']);
+        return $order->load(['items', 'statusHistory.user:id,name', 'user:id,name,email', 'canceller:id,name', 'payments.refunds']);
     }
 
     private function user(Request $request): User

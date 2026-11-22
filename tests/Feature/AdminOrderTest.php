@@ -6,16 +6,20 @@ use App\Enums\PaymentStatus;
 use App\Enums\RedemptionStatus;
 use App\Enums\ReservationStatus;
 use App\Exceptions\OrderException;
+use App\Jobs\ProcessRefund;
 use App\Models\CouponRedemption;
 use App\Models\InventoryMovement;
 use App\Models\InventoryReservation;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\ProductVariant;
+use App\Models\Refund;
 use App\Models\User;
 use App\Services\CartService;
 use App\Services\OrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
 
 uses(RefreshDatabase::class);
@@ -539,16 +543,26 @@ describe('when staff', function () {
         expect($variant->fresh()->stock)->toBe(8);
     })->with([OrderStatus::Shipped, OrderStatus::Delivered, OrderStatus::Cancelled]);
 
-    it('cannot cancel an order that was paid until it is refunded', function () {
+    it('cancels a paid order and requests a product refund without delivery', function () {
+        Queue::fake([ProcessRefund::class]);
         [$order, $variant] = codOrderFor($this->customer, 2);
         $order->update(['status' => OrderStatus::Confirmed, 'payment_status' => PaymentStatus::Paid]);
+        Payment::factory()->for($order)->succeeded()->create([
+            'amount' => $order->grand_total,
+            'paid_amount' => $order->grand_total,
+            'provider_reference' => 'BANK-ORDER-CANCEL',
+        ]);
 
-        $this->postJson("/api/admin/orders/{$order->number}/cancel", ['reason' => 'Customer asked'])
-            ->assertStatus(409)
-            ->assertJsonPath('message', 'This order has already been paid. It must be refunded before it can be cancelled.');
+        $this->postJson("/api/admin/orders/{$order->number}/cancel", [
+            'reason' => 'Customer asked',
+            'include_delivery_fee' => false,
+        ])->assertOk()
+            ->assertJsonPath('data.status', 'cancelled')
+            ->assertJsonPath('data.payment_status', 'refund_pending');
 
-        expect($order->fresh()->status)->toBe(OrderStatus::Confirmed);
-        expect($variant->fresh()->stock)->toBe(8);
+        expect($order->fresh()->status)->toBe(OrderStatus::Cancelled);
+        expect(Refund::firstOrFail()->amount)->toBe('2000.00');
+        expect($variant->fresh()->stock)->toBe(10);
     });
 
     it('cancels only once and puts the stock back only once', function () {
