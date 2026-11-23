@@ -71,6 +71,14 @@ class OrderResource extends JsonResource
                 'note' => $entry->note,
                 'at' => $entry->created_at,
             ])->all()),
+            'refunds' => $this->whenLoaded('refunds', fn () => $this->refunds->map(fn ($refund) => [
+                'reference' => $refund->reference,
+                'amount' => $refund->amount,
+                'status' => $refund->status->value,
+                'reason' => $refund->reason,
+                'created_at' => $refund->created_at,
+                'processed_at' => $refund->processed_at,
+            ])->all()),
         ];
     }
 }

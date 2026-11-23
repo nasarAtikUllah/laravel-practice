@@ -22,6 +22,7 @@ class ReconcilePayments extends Command
     public function handle(): int
     {
         $paymentProblems = [];
+        $reviewProblems = [];
         $refundProblems = [];
         $orderProblems = [];
 
@@ -29,7 +30,7 @@ class ReconcilePayments extends Command
             ->withSum(['refunds as reserved_refund_total' => fn ($query) => $query
                 ->where('status', '!=', RefundStatus::Failed->value)], 'amount');
 
-        $payments->chunkById(500, function ($chunk) use (&$paymentProblems): void {
+        $payments->chunkById(500, function ($chunk) use (&$paymentProblems, &$reviewProblems): void {
             foreach ($chunk as $payment) {
                 $paidCents = $payment->paid_amount === null ? null : Money::cents($payment->paid_amount);
                 $reservedCents = Money::cents($payment->reserved_refund_total ?? 0);
@@ -38,6 +39,11 @@ class ReconcilePayments extends Command
                     $paymentProblems[] = [$payment->reference, 'captured payment has no paid_amount'];
                 } elseif ($paidCents !== null && $reservedCents > $paidCents) {
                     $paymentProblems[] = [$payment->reference, Money::format($reservedCents - $paidCents)];
+                } elseif ($paidCents !== null && $payment->review_reason !== null && $reservedCents < $paidCents) {
+                    $reviewProblems[] = [
+                        $payment->reference,
+                        $payment->review_reason.': '.Money::format($paidCents - $reservedCents).' captured funds need staff review or a refund',
+                    ];
                 }
             }
         });
@@ -50,7 +56,12 @@ class ReconcilePayments extends Command
                         $refundProblems[] = [$refund->reference, 'refund order does not match payment order'];
                     }
 
-                    if ($refund->status === RefundStatus::Pending && $refund->updated_at->lte(now()->subMinutes(5))) {
+                    if ($refund->status === RefundStatus::Failed) {
+                        $refundProblems[] = [
+                            $refund->reference,
+                            'refund failed: '.($refund->failure_reason ?? 'review and retry if appropriate'),
+                        ];
+                    } elseif ($refund->status === RefundStatus::Pending && $refund->updated_at->lte(now()->subMinutes(5))) {
                         $refundProblems[] = [$refund->reference, 'refund is still queued; check that a queue worker is running'];
                     } elseif ($refund->status === RefundStatus::Processing
                         && $refund->updated_at->lte(now()->subMinutes(5))) {
@@ -63,6 +74,13 @@ class ReconcilePayments extends Command
             ->withSum('payments as captured_total', 'paid_amount')
             ->withSum(['refunds as refunded_total' => fn ($query) => $query
                 ->where('status', RefundStatus::Succeeded->value)], 'amount')
+            ->withCount([
+                'refunds as unresolved_refund_count' => fn ($query) => $query->whereIn('status', [
+                    RefundStatus::Pending->value,
+                    RefundStatus::Processing->value,
+                    RefundStatus::Failed->value,
+                ]),
+            ])
             ->chunkById(500, function ($chunk) use (&$orderProblems): void {
                 foreach ($chunk as $order) {
                     $capturedCents = Money::cents($order->captured_total ?? 0);
@@ -88,8 +106,23 @@ class ReconcilePayments extends Command
                     } elseif ($fullyRefunded && $order->status === OrderStatus::Cancelled
                         && $order->payment_status !== PaymentStatus::Refunded) {
                         $orderProblems[] = [$order->number, 'all captured money was refunded but order status was not updated'];
-                    } elseif ($order->status === OrderStatus::Cancelled && $capturedCents > $refundedCents) {
-                        $orderProblems[] = [$order->number, Money::format($capturedCents - $refundedCents)];
+                    } elseif ($order->payment_status === PaymentStatus::PartiallyRefunded && (
+                        $order->status !== OrderStatus::Cancelled
+                        || $refundedCents === 0
+                        || $refundedCents >= $capturedCents
+                    )) {
+                        $orderProblems[] = [$order->number, 'partially-refunded status does not match order and payment totals'];
+                    } elseif ($order->status === OrderStatus::Cancelled
+                        && $order->payment_status === PaymentStatus::RefundPending
+                        && $order->unresolved_refund_count === 0) {
+                        $orderProblems[] = [$order->number, 'refund-pending order has no refund awaiting a provider result or retry'];
+                    } elseif ($order->status === OrderStatus::Cancelled
+                        && $capturedCents > $refundedCents
+                        && ! in_array($order->payment_status, [PaymentStatus::RefundPending, PaymentStatus::PartiallyRefunded], true)) {
+                        $orderProblems[] = [
+                            $order->number,
+                            'cancelled order has '.Money::format($capturedCents - $refundedCents).' captured funds not covered by a refund',
+                        ];
                     }
                 }
             });
@@ -99,9 +132,18 @@ class ReconcilePayments extends Command
             $this->table(['Payment', 'Problem'], $paymentProblems);
         }
 
+        if ($reviewProblems !== []) {
+            $this->error(count($reviewProblems).' payment(s) need staff review or a refund.');
+            foreach ($reviewProblems as [$reference, $reason]) {
+                $this->line("{$reference}: {$reason}");
+            }
+        }
+
         if ($refundProblems !== []) {
             $this->error(count($refundProblems).' refund(s) need attention.');
-            $this->table(['Refund', 'Problem'], $refundProblems);
+            foreach ($refundProblems as [$reference, $reason]) {
+                $this->line("{$reference}: {$reason}");
+            }
         }
 
         if ($orderProblems !== []) {
@@ -109,7 +151,7 @@ class ReconcilePayments extends Command
             $this->table(['Order', 'Problem'], $orderProblems);
         }
 
-        if ($paymentProblems === [] && $refundProblems === [] && $orderProblems === []) {
+        if ($paymentProblems === [] && $reviewProblems === [] && $refundProblems === [] && $orderProblems === []) {
             $this->info('No problems found.');
 
             return self::SUCCESS;
@@ -117,6 +159,7 @@ class ReconcilePayments extends Command
 
         Log::error('Payment reconcile found problems', [
             'payment_problems' => count($paymentProblems),
+            'review_problems' => count($reviewProblems),
             'refund_problems' => count($refundProblems),
             'order_problems' => count($orderProblems),
         ]);

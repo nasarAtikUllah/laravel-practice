@@ -18,10 +18,13 @@ use Illuminate\Support\Carbon;
  * @property string $reason
  * @property string|null $provider_refund_id
  * @property int|null $requested_by
+ * @property int|null $resolved_by
  * @property string|null $failure_reason
+ * @property string|null $resolution_note
  * @property int $attempts
  * @property string $idempotency_key
  * @property Carbon|null $processed_at
+ * @property Carbon|null $resolved_at
  */
 class Refund extends Model
 {
@@ -37,10 +40,13 @@ class Refund extends Model
         'reason',
         'provider_refund_id',
         'requested_by',
+        'resolved_by',
         'failure_reason',
+        'resolution_note',
         'attempts',
         'idempotency_key',
         'processed_at',
+        'resolved_at',
     ];
 
     protected function casts(): array
@@ -50,6 +56,7 @@ class Refund extends Model
             'status' => RefundStatus::class,
             'attempts' => 'integer',
             'processed_at' => 'datetime',
+            'resolved_at' => 'datetime',
         ];
     }
 
@@ -69,5 +76,11 @@ class Refund extends Model
     public function requester(): BelongsTo
     {
         return $this->belongsTo(User::class, 'requested_by');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function resolver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'resolved_by');
     }
 }

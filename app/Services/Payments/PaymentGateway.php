@@ -43,4 +43,13 @@ interface PaymentGateway
      * @throws GatewayException
      */
     public function refund(Payment $payment, Refund $refund): array;
+
+    /**
+     * Checks a refund without submitting it again.
+     *
+     * @return array{status: string, provider_refund_id: string|null, failure_reason: string|null}
+     *
+     * @throws GatewayException
+     */
+    public function queryRefund(Refund $refund): array;
 }

@@ -16,3 +16,4 @@ Schedule::command('coupons:reconcile')->dailyAt('02:10');
 Schedule::command('payments:reconcile')->dailyAt('02:20')->withoutOverlapping();
 Schedule::command('sanctum:prune-expired --hours=24')->daily();
 Schedule::command('payments:sync')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('refunds:sync')->everyFiveMinutes()->withoutOverlapping();

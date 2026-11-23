@@ -21,8 +21,11 @@ class AdminRefundResource extends JsonResource
             'reason' => $this->reason,
             'provider_refund_id' => $this->provider_refund_id,
             'failure_reason' => $this->failure_reason,
+            'resolved_by' => $this->resolved_by,
+            'resolution_note' => $this->resolution_note,
             'attempts' => $this->attempts,
             'processed_at' => $this->processed_at,
+            'resolved_at' => $this->resolved_at,
             'created_at' => $this->created_at,
         ];
     }

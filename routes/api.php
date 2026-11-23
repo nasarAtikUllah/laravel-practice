@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AdminOrderController;
 use App\Http\Controllers\Api\V1\AdminPaymentController;
+use App\Http\Controllers\Api\V1\AdminRefundController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BrandController;
 use App\Http\Controllers\Api\V1\CartController;
@@ -141,6 +142,9 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::middleware(['can:manage-refunds', 'throttle:orders-admin'])->group(function () {
+        Route::get('/admin/refunds', [AdminRefundController::class, 'index']);
+        Route::get('/admin/refunds/{refund}', [AdminRefundController::class, 'show'])->whereNumber('refund');
+        Route::post('/admin/refunds/{refund}/resolve', [AdminRefundController::class, 'resolve'])->whereNumber('refund');
         Route::post('/admin/payments/{reference}/refunds', [AdminPaymentController::class, 'refund'])
             ->where('reference', Payment::REFERENCE_PATTERN);
         Route::post('/admin/refunds/{refund}/retry', [AdminPaymentController::class, 'retryRefund'])

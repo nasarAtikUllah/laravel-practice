@@ -4,11 +4,14 @@ use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\ProductStatus;
 use App\Enums\RedemptionStatus;
+use App\Enums\RefundStatus;
 use App\Enums\ReservationStatus;
 use App\Models\CouponRedemption;
 use App\Models\InventoryMovement;
 use App\Models\InventoryReservation;
 use App\Models\Order;
+use App\Models\Payment;
+use App\Models\Refund;
 use App\Models\ShippingOption;
 use App\Models\User;
 use App\Services\CartService;
@@ -427,6 +430,28 @@ describe('when logged in', function () {
             ->assertJsonPath('data.history.0.to', 'pending_confirmation')
             ->assertJsonPath('data.history.0.note', 'Order placed')
             ->assertJsonMissingPath('data.history.0.user');
+    });
+
+    it('shows refund progress only on owned orders', function () {
+        $order = Order::factory()->for($this->user)->create();
+        $payment = Payment::factory()->for($order)->succeeded()->create();
+        $refund = Refund::factory()->for($payment)->create([
+            'order_id' => $order->id,
+            'status' => RefundStatus::Processing,
+            'provider_refund_id' => 'PRIVATE-PROVIDER-REF',
+        ]);
+
+        $this->getJson("/api/orders/{$order->number}")
+            ->assertOk()
+            ->assertJsonPath('data.refunds.0.reference', $refund->reference)
+            ->assertJsonPath('data.refunds.0.status', 'processing')
+            ->assertJsonMissingPath('data.refunds.0.provider_refund_id');
+
+        $otherOrder = Order::factory()->create();
+        $otherPayment = Payment::factory()->for($otherOrder)->succeeded()->create();
+        Refund::factory()->for($otherPayment)->create(['order_id' => $otherOrder->id]);
+
+        $this->getJson("/api/orders/{$otherOrder->number}")->assertNotFound();
     });
 
     it('shows an order made by the factory in the same number format', function () {

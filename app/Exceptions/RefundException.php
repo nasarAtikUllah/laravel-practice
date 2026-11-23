@@ -28,6 +28,11 @@ class RefundException extends DomainException
         return new self('Only a failed refund can be retried.', 409);
     }
 
+    public static function cannotResolve(): self
+    {
+        return new self('Only a processing refund can be resolved.', 409);
+    }
+
     public static function idempotencyConflict(): self
     {
         return new self('This idempotency key was already used for a different refund.', 409);

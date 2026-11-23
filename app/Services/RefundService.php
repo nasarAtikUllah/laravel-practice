@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\RefundStatus;
 use App\Exceptions\RefundException;
@@ -128,6 +129,76 @@ class RefundService
         return $pending->refresh();
     }
 
+    public function resolve(
+        Refund $refund,
+        RefundStatus $status,
+        User $resolvedBy,
+        string $resolutionNote,
+        ?string $providerRefundId,
+        ?string $failureReason,
+    ): Refund {
+        if (! in_array($status, [RefundStatus::Succeeded, RefundStatus::Failed], true)) {
+            throw RefundException::cannotResolve();
+        }
+
+        return DB::transaction(function () use ($refund, $status, $resolvedBy, $resolutionNote, $providerRefundId, $failureReason) {
+            Payment::query()->lockForUpdate()->findOrFail($refund->payment_id);
+            $locked = Refund::query()->lockForUpdate()->findOrFail($refund->id);
+
+            if ($locked->status !== RefundStatus::Processing) {
+                throw RefundException::cannotResolve();
+            }
+
+            $locked->update([
+                'status' => $status,
+                'provider_refund_id' => $providerRefundId ?? $locked->provider_refund_id,
+                'failure_reason' => $status === RefundStatus::Failed ? $failureReason : null,
+                'resolved_by' => $resolvedBy->id,
+                'resolution_note' => trim($resolutionNote),
+                'resolved_at' => now(),
+                'processed_at' => now(),
+            ]);
+
+            $this->syncCancelledOrderPaymentStatus($locked->order_id);
+
+            return $locked;
+        });
+    }
+
+    public function sync(Refund $refund): ?RefundStatus
+    {
+        $refund->loadMissing('payment');
+
+        if ($refund->status !== RefundStatus::Processing) {
+            return null;
+        }
+
+        $result = $this->gateways
+            ->driver($refund->payment->provider)
+            ->queryRefund($refund);
+
+        return DB::transaction(function () use ($refund, $result): ?RefundStatus {
+            $locked = Refund::query()->lockForUpdate()->findOrFail($refund->id);
+
+            if ($locked->status !== RefundStatus::Processing) {
+                return null;
+            }
+
+            $status = RefundStatus::from($result['status']);
+            $locked->update([
+                'status' => $status,
+                'provider_refund_id' => $result['provider_refund_id'] ?? $locked->provider_refund_id,
+                'failure_reason' => $result['failure_reason'],
+                'processed_at' => $status === RefundStatus::Processing ? null : now(),
+            ]);
+            $locked->touch();
+
+            $this->syncCancelledOrderPaymentStatus($locked->order_id);
+
+            return $status;
+        });
+    }
+
     public function process(int $refundId): void
     {
         $refund = DB::transaction(function () use ($refundId) {
@@ -195,18 +266,7 @@ class RefundService
                 'processed_at' => $status === RefundStatus::Processing ? null : now(),
             ]);
 
-            $order = Order::query()->lockForUpdate()->findOrFail($locked->order_id);
-
-            if ($order->status->value === 'cancelled') {
-                $paidCents = Money::cents($order->payments()->sum('paid_amount'));
-                $refundedCents = Money::cents($order->refunds()
-                    ->where('status', RefundStatus::Succeeded->value)
-                    ->sum('amount'));
-
-                if ($paidCents > 0 && $refundedCents >= $paidCents) {
-                    $order->update(['payment_status' => PaymentStatus::Refunded]);
-                }
-            }
+            $this->syncCancelledOrderPaymentStatus($locked->order_id);
         });
     }
 
@@ -221,7 +281,47 @@ class RefundService
                     'failure_reason' => 'The payment gateway is not configured for this refund.',
                     'processed_at' => now(),
                 ]);
+
+                $this->syncCancelledOrderPaymentStatus($refund->order_id);
             }
         });
+    }
+
+    private function syncCancelledOrderPaymentStatus(int $orderId): void
+    {
+        $order = Order::query()->lockForUpdate()->findOrFail($orderId);
+
+        if ($order->status !== OrderStatus::Cancelled) {
+            return;
+        }
+
+        $capturedCents = Money::cents($order->payments()->sum('paid_amount'));
+
+        if ($capturedCents < 1) {
+            return;
+        }
+
+        $refundedCents = Money::cents($order->refunds()
+            ->where('status', RefundStatus::Succeeded->value)
+            ->sum('amount'));
+
+        $hasUnresolvedRefund = $order->refunds()
+            ->whereIn('status', [
+                RefundStatus::Pending->value,
+                RefundStatus::Processing->value,
+                RefundStatus::Failed->value,
+            ])
+            ->exists();
+
+        $paymentStatus = match (true) {
+            $refundedCents >= $capturedCents => PaymentStatus::Refunded,
+            $hasUnresolvedRefund => PaymentStatus::RefundPending,
+            $refundedCents > 0 => PaymentStatus::PartiallyRefunded,
+            default => null,
+        };
+
+        if ($paymentStatus !== null && $order->payment_status !== $paymentStatus) {
+            $order->update(['payment_status' => $paymentStatus]);
+        }
     }
 }

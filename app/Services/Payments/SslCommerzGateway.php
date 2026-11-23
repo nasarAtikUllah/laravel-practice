@@ -154,6 +154,42 @@ class SslCommerzGateway implements PaymentGateway
         ];
     }
 
+    public function queryRefund(Refund $refund): array
+    {
+        if (trim((string) $refund->provider_refund_id) === '') {
+            throw new GatewayException('The provider refund reference is missing.');
+        }
+
+        $response = $this->send(fn () => Http::timeout($this->timeout)->get($this->host().'/validator/api/merchantTransIDvalidationAPI.php', [
+            'refund_ref_id' => $refund->provider_refund_id,
+            'store_id' => $this->storeId,
+            'store_passwd' => $this->storePassword,
+            'format' => 'json',
+        ]));
+
+        $data = $response->json();
+
+        if (! is_array($data) || ($data['APIConnect'] ?? null) !== 'DONE') {
+            throw new GatewayException('SSLCommerz could not confirm the refund status.');
+        }
+
+        $status = strtolower(trim((string) ($data['status'] ?? '')));
+        $failed = in_array($status, ['failed', 'failure'], true);
+        $failureReason = $this->text($data['errorReason'] ?? $data['error'] ?? null, 255);
+
+        return [
+            'status' => match ($status) {
+                'success' => 'succeeded',
+                'failed', 'failure' => 'failed',
+                default => 'processing',
+            },
+            'provider_refund_id' => $this->text($data['refund_ref_id'] ?? null, 100) ?? $refund->provider_refund_id,
+            'failure_reason' => $failed
+                ? ($failureReason ?? 'SSLCommerz rejected the refund request.')
+                : null,
+        ];
+    }
+
     /**
      * Adds the signature fields the way SSLCommerz does. Used by the tests.
      *
