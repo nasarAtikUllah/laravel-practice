@@ -40,6 +40,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $coupon_scope
  * @property string|null $shipping_option_code
  * @property string|null $shipping_option_name
+ * @property-read int $unresolved_refund_count
  */
 class Order extends Model
 {

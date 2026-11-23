@@ -8,5 +8,6 @@ enum PaymentStatus: string
     case Paid = 'paid';
     case NotRequired = 'not_required';
     case RefundPending = 'refund_pending';
+    case PartiallyRefunded = 'partially_refunded';
     case Refunded = 'refunded';
 }

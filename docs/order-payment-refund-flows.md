@@ -37,7 +37,7 @@ flowchart TD
 | Online, payment required | `pending_payment` / `unpaid` | Reserved until payment or cancellation |
 | Cash on delivery | `pending_confirmation` / `unpaid` | Stock sold and coupon counted immediately |
 | Online, zero total | `confirmed` / `not_required` | Stock sold and coupon counted immediately |
-| Staff cancels a paid order | `cancelled` / `refund_pending` while eligible refund is outstanding | Stock restored and coupon use released |
+| Staff cancels a paid order | `cancelled` / `refund_pending` while refunds are outstanding, then `partially_refunded` or `refunded` | Stock restored and coupon use released |
 | Cancelled order, all captured money returned | `cancelled` / `refunded` | No automatic restock/coupon change after refund success |
 
 Customers may cancel eligible unpaid orders. Staff may cancel orders while their current order status allows it, including a paid confirmed order. A paid-order cancellation requires an explicit `include_delivery_fee` choice. Shipped and delivered orders cannot be cancelled through this workflow.
@@ -104,7 +104,7 @@ sequenceDiagram
     alt Provider confirms success
         Gateway-->>Queue: succeeded + provider refund id
         Queue->>DB: Mark refund succeeded
-        Note over DB: Cancelled order becomes refunded only when all captured money is returned
+        Note over DB: Cancelled order becomes partially_refunded if money remains, or refunded if all captured money returned
     else Provider definitively rejects request
         Gateway-->>Queue: failed
         Queue->>DB: Save failure reason
@@ -112,7 +112,14 @@ sequenceDiagram
     else Timeout or unknown provider outcome
         Gateway--xQueue: No trustworthy outcome
         Note over Queue,DB: Leave processing; never automatically resend
-        Note over DB: payments:reconcile flags stale processing refunds for manual inspection
+        Scheduler->>Gateway: refunds:sync queries the provider refund reference
+        alt Provider has a final status
+            Gateway-->>Scheduler: succeeded or failed
+            Scheduler->>DB: Save provider status and update cancelled order payment status
+        else Provider status is still unknown
+            Scheduler-->>Admin: Keep processing; inspect provider before resolving
+            Admin->>API: POST /admin/refunds/{id}/resolve after checking provider
+        end
     end
 
     Staff->>API: Cancel paid order + include_delivery_fee choice
@@ -127,9 +134,10 @@ sequenceDiagram
 - `paid_amount` is the provider-reported amount actually received. This matters when the received amount differs from the original payment attempt.
 - Partial refunds are available through the admin refund endpoint. The payment row is locked while the refundable balance is checked.
 - Each request has a unique provider-facing refund reference and an idempotency key unique within its payment.
-- Failed refunds may be explicitly retried by an admin. `processing` means the provider outcome is uncertain; do not retry until a person checks the provider.
+- Failed refunds may be explicitly retried by an admin. `processing` means the provider outcome is uncertain; `refunds:sync` checks it with SSLCommerz, and an admin may resolve it only after checking the provider.
 - Staff cancellation refunds eligible captured payments for products. Delivery is retained unless staff explicitly includes it.
 - Late, duplicate, cancelled-order, and amount-mismatch payments are flagged for a person; this workflow does not automatically refund them.
+- Customers can see refund amount, reason, and status on their own order. Admins can list and inspect refunds at `GET /admin/refunds` and `GET /admin/refunds/{id}`.
 
 ## 4. Expiry and reconciliation
 
@@ -147,14 +155,16 @@ flowchart LR
     Scheduler --> FiveMin["Every five minutes"]
     FiveMin --> Sync["payments:sync"]
     Sync --> Missed["Look for payment outcomes missed by callbacks"]
+    FiveMin --> RefundSync["refunds:sync"]
+    RefundSync --> RefundStatus["Query processing refunds at SSLCommerz"]
 
     Scheduler --> Daily["Daily"]
     Daily --> Reconcile["payments:reconcile"]
     Reconcile --> CheckTotals["Compare captured payments, refunds,<br/>and order payment status"]
-    CheckTotals --> Flag["Report stale pending/processing refunds<br/>and inconsistent totals"]
+    CheckTotals --> Flag["Report failed/stale refunds, unrefunded<br/>review payments, and inconsistent totals"]
 ```
 
-Run both the scheduler (`php artisan schedule:work`, or cron invoking `schedule:run`) and a queue worker (`php artisan queue:work`). Without the queue worker, refunds can remain `pending`; reconciliation reports old queued refunds. It never submits refunds itself.
+Run both the scheduler (`php artisan schedule:work`, or cron invoking `schedule:run`) and a queue worker (`php artisan queue:work`). Without the queue worker, refunds can remain `pending`; reconciliation reports old queued refunds. Status sync only queries the provider and never resubmits a refund. If the provider outcome remains unknown, an admin must inspect it before using the resolve endpoint.
 
 ## 5. Where to look in the code
 
@@ -163,6 +173,6 @@ Run both the scheduler (`php artisan schedule:work`, or cron invoking `schedule:
 | Checkout, cancellation, fulfillment | [`OrderService`](../app/Services/OrderService.php) |
 | Payment initiation and verified provider outcomes | [`PaymentService`](../app/Services/PaymentService.php) |
 | SSLCommerz requests and callbacks | [`SslCommerzGateway`](../app/Services/Payments/SslCommerzGateway.php), [`PaymentCallbackController`](../app/Http/Controllers/Api/V1/PaymentCallbackController.php) |
-| Refund ledger, balance guard, provider processing | [`RefundService`](../app/Services/RefundService.php), [`ProcessRefund`](../app/Jobs/ProcessRefund.php) |
-| Order expiry and payment reconciliation | [`ExpireOrders`](../app/Console/Commands/ExpireOrders.php), [`ReconcilePayments`](../app/Console/Commands/ReconcilePayments.php) |
+| Refund ledger, balance guard, provider processing and resolution | [`RefundService`](../app/Services/RefundService.php), [`ProcessRefund`](../app/Jobs/ProcessRefund.php), [`AdminRefundController`](../app/Http/Controllers/Api/V1/AdminRefundController.php) |
+| Refund status synchronization and payment reconciliation | [`SyncRefunds`](../app/Console/Commands/SyncRefunds.php), [`ReconcilePayments`](../app/Console/Commands/ReconcilePayments.php) |
 | Scheduled tasks | [`routes/console.php`](../routes/console.php) |

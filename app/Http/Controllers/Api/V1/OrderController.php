@@ -27,6 +27,7 @@ class OrderController extends Controller
 
         $orders = $this->user($request)->orders()
             ->withCount('items')
+            ->with(['refunds:id,order_id,reference,amount,status,reason,created_at,processed_at'])
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->input('status')))
             ->latest('id')
             ->paginate($request->integer('per_page', 10))
@@ -82,7 +83,7 @@ class OrderController extends Controller
     {
         return $this->user($request)->orders()
             ->where('number', $number)
-            ->with(['items', 'statusHistory'])
+            ->with(['items', 'statusHistory', 'refunds:id,order_id,reference,amount,status,reason,created_at,processed_at'])
             ->firstOrFail();
     }
 
